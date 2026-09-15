@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<!--
+  KEEP IN SYNC WITH: frontend/src/components/invoice/invoice-print.css
+  and frontend/src/components/invoice/InvoiceDocument.tsx.
+  This template is the source of truth for the downloaded PDF; the React
+  component is the source of truth for the on-screen preview. Both are meant
+  to look like the same printed paper -- if you change colors/layout/copy
+  here, mirror the change there (and vice versa).
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<style>
+  @page { size: A4; margin: 0; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: "DejaVu Sans", Arial, sans-serif;
+    color: #1e293b;
+    background: #ffffff;
+    font-size: 12px;
+  }
+  .sheet { padding: 0 0 28px 0; }
+
+  .banner {
+    background: #1d3a8a;
+    background: linear-gradient(135deg, #1d3a8a 0%, #2547ad 100%);
+    color: #ffffff;
+    padding: 28px 36px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+  }
+  .banner img.property-photo {
+    width: 56px; height: 56px; border-radius: 10px; object-fit: cover;
+    border: 2px solid rgba(255,255,255,0.6);
+  }
+  .banner .icon-fallback {
+    width: 56px; height: 56px; border-radius: 10px;
+    background: rgba(255,255,255,0.15);
+    border: 2px solid rgba(255,255,255,0.6);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 26px;
+  }
+  .banner h1 { margin: 0; font-size: 20px; font-weight: 700; letter-spacing: 0.2px; }
+  .banner .date { margin-top: 4px; font-size: 12px; color: #dbe4ff; }
+
+  .content { padding: 24px 36px 0 36px; }
+
+  .section-title {
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+    color: #1d3a8a;
+    margin: 20px 0 8px 0;
+    border-bottom: 2px solid #dbe4ff;
+    padding-bottom: 6px;
+  }
+
+  .tenant-info p { margin: 2px 0; line-height: 1.5; }
+  .tenant-info .name { font-size: 15px; font-weight: 700; color: #0f172a; }
+  .tenant-info .address { color: #475569; white-space: pre-line; }
+
+  table.charges { width: 100%; border-collapse: collapse; margin-top: 4px; }
+  table.charges th {
+    text-align: left; font-size: 10px; text-transform: uppercase;
+    color: #64748b; padding: 6px 8px; border-bottom: 1px solid #cbd5e1;
+  }
+  table.charges td {
+    padding: 8px; font-size: 12px; border-bottom: 1px solid #e2e8f0; color: #1e293b;
+  }
+  table.charges td.num, table.charges th.num { text-align: right; }
+  table.charges td.desc { font-weight: 600; }
+  table.charges tfoot td { border-bottom: none; }
+
+  .dues-row { display: flex; justify-content: space-between; padding: 6px 0; font-size: 13px; }
+  .dues-row .label { color: #475569; }
+  .dues-row .value { font-weight: 600; }
+
+  .total-bar {
+    margin-top: 10px;
+    background: #eef2ff;
+    border: 1px solid #c7d2fe;
+    border-radius: 8px;
+    padding: 12px 16px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .total-bar .label { font-size: 13px; font-weight: 700; color: #1d3a8a; }
+  .total-bar .value { font-size: 20px; font-weight: 800; color: #1d3a8a; }
+
+  .payment-area {
+    margin-top: 22px;
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    padding: 16px;
+  }
+  .payment-area .upi-block .upi-label { font-size: 10px; text-transform: uppercase; color: #64748b; }
+  .payment-area .upi-block .upi-id { font-size: 14px; font-weight: 700; color: #0f172a; margin-top: 2px; }
+  .payment-area img.qr { width: 96px; height: 96px; }
+
+  .notes {
+    margin-top: 20px;
+    font-size: 10.5px;
+    color: #64748b;
+    line-height: 1.6;
+    border-top: 1px dashed #cbd5e1;
+    padding-top: 10px;
+  }
+</style>
+</head>
+<body>
+  <div class="sheet">
+    <div class="banner">
+      {% if property_photo_data_uri %}
+        <img class="property-photo" src="{{ property_photo_data_uri }}" />
+      {% else %}
+        <div class="icon-fallback">&#127968;</div>
+      {% endif %}
+      <div>
+        <h1>Rent &amp; Utilities Invoice</h1>
+        <div class="date">{{ invoice.invoice_date.strftime('%d %B %Y') }}</div>
+      </div>
+    </div>
+
+    <div class="content">
+      <div class="section-title">Tenant Information</div>
+      <div class="tenant-info">
+        <p class="name">{{ tenant.name }}</p>
+        <p class="address">{{ tenant.property_address }}</p>
+      </div>
+
+      <div class="section-title">Utility Charges</div>
+      <table class="charges">
+        <thead>
+          <tr>
+            <th>Description</th>
+            <th class="num">Start</th>
+            <th class="num">End</th>
+            <th class="num">Usage</th>
+            <th class="num">Rate</th>
+            <th class="num">Amount</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="desc">Room Meter (A)</td>
+            <td class="num">{{ invoice.room_start }}</td>
+            <td class="num">{{ invoice.room_end }}</td>
+            <td class="num">{{ invoice.room_usage }}</td>
+            <td class="num">&#8377;{{ '%.2f'|format(invoice.room_rate) }}</td>
+            <td class="num">&#8377;{{ '%.2f'|format(invoice.room_amount) }}</td>
+          </tr>
+          <tr>
+            <td class="desc">Water Meter (B)</td>
+            <td class="num">{{ invoice.water_start }}</td>
+            <td class="num">{{ invoice.water_end }}</td>
+            <td class="num">{{ invoice.water_usage }}</td>
+            <td class="num">&#8377;{{ '%.2f'|format(invoice.water_rate) }}</td>
+            <td class="num">&#8377;{{ '%.2f'|format(invoice.water_amount) }}</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="section-title">Rent &amp; Dues</div>
+      <div class="dues-row">
+        <span class="label">Monthly Rent (C)</span>
+        <span class="value">&#8377;{{ '%.2f'|format(invoice.monthly_rent) }}</span>
+      </div>
+      <div class="dues-row">
+        <span class="label">Previous Dues (D)</span>
+        <span class="value">&#8377;{{ '%.2f'|format(invoice.previous_dues) }}</span>
+      </div>
+      <div class="total-bar">
+        <span class="label">Total Payable (A+B+C+D)</span>
+        <span class="value">&#8377;{{ '%.2f'|format(invoice.total_payable) }}</span>
+      </div>
+
+      <div class="payment-area">
+        <div class="upi-block">
+          <div class="upi-label">Pay via UPI</div>
+          <div class="upi-id">{{ invoice.upi_id or 'Contact landlord for UPI ID' }}</div>
+        </div>
+        {% if qr_data_uri %}
+          <img class="qr" src="{{ qr_data_uri }}" />
+        {% endif %}
+      </div>
+
+      <div class="notes">
+        Payment is due within {{ invoice.due_days }} day{{ 's' if invoice.due_days != 1 else '' }} of the invoice date.
+        {% if invoice.water_divisor and invoice.water_divisor > 1 %}
+          Water usage on this invoice was divided by {{ invoice.water_divisor }} (shared meter).
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</body>
+</html>

@@ -1,0 +1,92 @@
+/*
+  KEEP IN SYNC WITH: backend/templates/invoice.html
+  This is the on-screen source of truth for the invoice's look; the Jinja2
+  template is the source of truth for the downloaded PDF. Both are meant to
+  render as the same printed paper -- mirror layout/color/copy changes both
+  ways. Deliberately NOT part of the Tailwind theme layer and NOT using any
+  dark: variant anywhere in this file: the invoice must look like a printed
+  paper (white background, blue accents) regardless of the app's own
+  light/dark theme.
+*/
+
+.inv-sheet {
+  background: #ffffff;
+  color: #1e293b;
+  font-family: 'Inter', ui-sans-serif, system-ui, sans-serif;
+  border-radius: 14px;
+  overflow: hidden;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.12), 0 8px 24px rgba(15, 23, 42, 0.06);
+}
+
+.inv-banner {
+  background: linear-gradient(135deg, #1d3a8a 0%, #2547ad 100%);
+  color: #ffffff;
+  padding: 22px 20px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+.inv-banner-photo {
+  width: 52px; height: 52px; border-radius: 10px; object-fit: cover;
+  border: 2px solid rgba(255,255,255,0.6); flex-shrink: 0;
+}
+.inv-banner-icon {
+  width: 52px; height: 52px; border-radius: 10px;
+  background: rgba(255,255,255,0.15);
+  border: 2px solid rgba(255,255,255,0.6);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 24px; flex-shrink: 0;
+}
+.inv-banner h1 { margin: 0; font-size: 18px; font-weight: 700; }
+.inv-banner .inv-date { margin-top: 4px; font-size: 12px; color: #dbe4ff; }
+
+.inv-content { padding: 20px; }
+
+.inv-section-title {
+  font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.6px;
+  color: #1d3a8a; margin: 18px 0 8px 0; border-bottom: 2px solid #dbe4ff; padding-bottom: 6px;
+}
+.inv-section-title:first-child { margin-top: 0; }
+
+.inv-tenant-name { font-size: 15px; font-weight: 700; color: #0f172a; margin: 2px 0; }
+.inv-tenant-address { color: #475569; white-space: pre-line; margin: 2px 0; font-size: 13px; }
+
+.inv-table { width: 100%; border-collapse: collapse; margin-top: 4px; font-size: 12px; }
+.inv-table th {
+  text-align: left; font-size: 10px; text-transform: uppercase; color: #64748b;
+  padding: 6px 6px; border-bottom: 1px solid #cbd5e1;
+}
+.inv-table td { padding: 8px 6px; border-bottom: 1px solid #e2e8f0; color: #1e293b; }
+.inv-table .inv-num { text-align: right; }
+.inv-table .inv-desc { font-weight: 600; }
+
+.inv-dues-row { display: flex; justify-content: space-between; padding: 6px 0; font-size: 13px; }
+.inv-dues-row .inv-label { color: #475569; }
+.inv-dues-row .inv-value { font-weight: 600; }
+
+.inv-total-bar {
+  margin-top: 10px; background: #eef2ff; border: 1px solid #c7d2fe; border-radius: 8px;
+  padding: 12px 16px; display: flex; justify-content: space-between; align-items: center;
+  flex-wrap: wrap; gap: 8px;
+}
+.inv-total-bar .inv-label { font-size: 13px; font-weight: 700; color: #1d3a8a; }
+.inv-total-bar .inv-value { font-size: 20px; font-weight: 800; color: #1d3a8a; }
+
+.inv-payment-area {
+  margin-top: 20px; display: flex; justify-content: space-between; align-items: center;
+  background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 16px; gap: 12px;
+  flex-wrap: wrap;
+}
+.inv-upi-label { font-size: 10px; text-transform: uppercase; color: #64748b; }
+.inv-upi-id { font-size: 14px; font-weight: 700; color: #0f172a; margin-top: 2px; word-break: break-all; }
+.inv-qr { width: 88px; height: 88px; flex-shrink: 0; background: #fff; border-radius: 6px; }
+.inv-qr-placeholder {
+  width: 88px; height: 88px; flex-shrink: 0; border: 1px dashed #cbd5e1; border-radius: 6px;
+  display: flex; align-items: center; justify-content: center; font-size: 10px; color: #94a3b8;
+  text-align: center; padding: 4px;
+}
+
+.inv-notes {
+  margin-top: 18px; font-size: 10.5px; color: #64748b; line-height: 1.6;
+  border-top: 1px dashed #cbd5e1; padding-top: 10px;
+}
