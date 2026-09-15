@@ -3,13 +3,7 @@ import { adminClient } from '@/api/adminClient'
 import { documentsApi } from '@/api/documents'
 import { TenantDocument } from '@/types/tenant'
 import { fetchAuthedBlob, triggerBlobDownload } from '@/utils/blob'
-
-const DOC_TYPES = [
-  { value: 'lease', label: 'Lease agreement' },
-  { value: 'id_proof', label: 'ID proof' },
-  { value: 'photo', label: 'Move-in photo' },
-  { value: 'other', label: 'Other' },
-]
+import { useLabels } from '@/hooks/useLabels'
 
 function formatSize(bytes: number | null): string {
   if (!bytes) return ''
@@ -24,6 +18,14 @@ export default function DocumentList({ tenantId }: { tenantId: string }) {
   const [uploading, setUploading] = useState(false)
   const [docType, setDocType] = useState('other')
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const { l } = useLabels()
+
+  const DOC_TYPES = [
+    { value: 'lease', label: l('document.type.lease', 'Lease agreement') },
+    { value: 'id_proof', label: l('document.type.idProof', 'ID proof') },
+    { value: 'photo', label: l('document.type.photo', 'Move-in photo') },
+    { value: 'other', label: l('document.type.other', 'Other') },
+  ]
 
   async function load() {
     setLoading(true)
@@ -73,15 +75,15 @@ export default function DocumentList({ tenantId }: { tenantId: string }) {
           ))}
         </select>
         <label className="btn-secondary btn-compact cursor-pointer">
-          {uploading ? 'Uploading…' : 'Upload file'}
+          {uploading ? l('btn.uploading', 'Uploading…') : l('btn.uploadFile', 'Upload file')}
           <input ref={fileInputRef} type="file" className="hidden" onChange={handleFileChange} disabled={uploading} />
         </label>
       </div>
 
       {loading ? (
-        <p className="text-sm text-slate-500">Loading…</p>
+        <p className="text-sm text-slate-500">{l('status.loading', 'Loading…')}</p>
       ) : docs.length === 0 ? (
-        <p className="text-sm text-slate-500">No documents uploaded yet.</p>
+        <p className="text-sm text-slate-500">{l('document.empty', 'No documents uploaded yet.')}</p>
       ) : (
         <ul className="divide-y divide-slate-200 dark:divide-slate-800">
           {docs.map((doc) => (
@@ -93,8 +95,8 @@ export default function DocumentList({ tenantId }: { tenantId: string }) {
                 </p>
               </div>
               <div className="flex gap-2 flex-shrink-0">
-                <button className="btn-secondary btn-compact" onClick={() => handleDownload(doc)}>Download</button>
-                <button className="btn-danger btn-compact" onClick={() => handleDelete(doc)}>Delete</button>
+                <button className="btn-secondary btn-compact" onClick={() => handleDownload(doc)}>{l('btn.download', 'Download')}</button>
+                <button className="btn-danger btn-compact" onClick={() => handleDelete(doc)}>{l('btn.delete', 'Delete')}</button>
               </div>
             </li>
           ))}

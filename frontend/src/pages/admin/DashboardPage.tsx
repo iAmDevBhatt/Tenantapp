@@ -6,6 +6,8 @@ import { Tenant } from '@/types/tenant'
 import { Overview } from '@/types/settings'
 import { formatINR } from '@/utils/formulas'
 import TenantForm from '@/components/TenantForm'
+import TenantAvatar from '@/components/TenantAvatar'
+import { useLabels } from '@/hooks/useLabels'
 
 export default function DashboardPage() {
   const [tab, setTab] = useState<'active' | 'inactive'>('active')
@@ -14,6 +16,7 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true)
   const [showAddForm, setShowAddForm] = useState(false)
   const [defaultUpiId, setDefaultUpiId] = useState<string | null>(null)
+  const { l } = useLabels()
 
   async function load() {
     setLoading(true)
@@ -47,10 +50,10 @@ export default function DashboardPage() {
     <div className="space-y-6">
       {overview && (
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          <StatCard label="Active tenants" value={String(overview.activeTenantCount)} />
-          <StatCard label="Outstanding dues" value={formatINR(overview.totalOutstandingDues)} />
-          <StatCard label="Unpaid invoices" value={String(overview.unpaidInvoiceCount)} />
-          <StatCard label="Collected this month" value={formatINR(overview.thisMonthCollected)} />
+          <StatCard label={l('stat.activeTenants', 'Active tenants')} value={String(overview.activeTenantCount)} />
+          <StatCard label={l('stat.outstandingDues', 'Outstanding dues')} value={formatINR(overview.totalOutstandingDues)} />
+          <StatCard label={l('stat.unpaidInvoices', 'Unpaid invoices')} value={String(overview.unpaidInvoiceCount)} />
+          <StatCard label={l('stat.collectedThisMonth', 'Collected this month')} value={formatINR(overview.thisMonthCollected)} />
         </div>
       )}
 
@@ -60,26 +63,26 @@ export default function DashboardPage() {
             className={`btn-compact rounded-none ${tab === 'active' ? 'bg-brand-700 text-white' : 'bg-white dark:bg-slate-900'}`}
             onClick={() => setTab('active')}
           >
-            Active
+            {l('tab.active', 'Active')}
           </button>
           <button
             className={`btn-compact rounded-none ${tab === 'inactive' ? 'bg-brand-700 text-white' : 'bg-white dark:bg-slate-900'}`}
             onClick={() => setTab('inactive')}
           >
-            Moved out
+            {l('tab.movedOut', 'Moved out')}
           </button>
         </div>
         <button className="btn-primary" onClick={() => setShowAddForm((v) => !v)}>
-          {showAddForm ? 'Close' : '+ Add tenant'}
+          {showAddForm ? l('btn.close', 'Close') : l('btn.addTenant', '+ Add tenant')}
         </button>
       </div>
 
       {showAddForm && (
         <div className="card p-4 sm:p-6">
-          <h2 className="font-semibold mb-4">New tenant</h2>
+          <h2 className="font-semibold mb-4">{l('modal.title.newTenant', 'New tenant')}</h2>
           <TenantForm
             initial={{ upiId: defaultUpiId ?? '' }}
-            submitLabel="Add tenant"
+            submitLabel={l('btn.addTenant', '+ Add tenant')}
             onSubmit={handleAddTenant}
             onCancel={() => setShowAddForm(false)}
           />
@@ -87,25 +90,32 @@ export default function DashboardPage() {
       )}
 
       {loading ? (
-        <p className="text-slate-500">Loading…</p>
+        <p className="text-slate-500">{l('status.loading', 'Loading…')}</p>
       ) : tenants.length === 0 ? (
-        <p className="text-slate-500">No {tab === 'active' ? 'active' : 'moved-out'} tenants yet.</p>
+        <p className="text-slate-500">
+          {tab === 'active' ? l('tenant.emptyActive', 'No active tenants yet.') : l('tenant.emptyMovedOut', 'No moved-out tenants yet.')}
+        </p>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           {tenants.map((t) => (
             <Link key={t.id} to={`/tenants/${t.id}`} className="card p-4 hover:border-brand-400 transition-colors">
-              <div className="flex items-start justify-between gap-2">
-                <div className="min-w-0">
-                  <p className="font-semibold truncate">{t.name}</p>
-                  <p className="text-sm text-slate-500 truncate">{t.propertyAddress}</p>
+              <div className="flex items-start gap-3">
+                <TenantAvatar tenantId={t.id} hasProfilePhoto={t.hasProfilePhoto} name={t.name} size="sm" />
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <p className="font-semibold truncate">{t.name}</p>
+                      <p className="text-sm text-slate-500 truncate">{t.propertyAddress}</p>
+                    </div>
+                    {!t.hasPortalAccount && t.active && (
+                      <span className="text-xs bg-amber-100 text-amber-700 rounded-full px-2 py-0.5 flex-shrink-0">
+                        {l('tenant.badge.noPortalLogin', 'No portal login')}
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-sm text-slate-500 mt-1">Rent {formatINR(t.monthlyRent)}/mo</p>
                 </div>
-                {!t.hasPortalAccount && t.active && (
-                  <span className="text-xs bg-amber-100 text-amber-700 rounded-full px-2 py-0.5 flex-shrink-0">
-                    No portal login
-                  </span>
-                )}
               </div>
-              <p className="text-sm text-slate-500 mt-2">Rent {formatINR(t.monthlyRent)}/mo</p>
             </Link>
           ))}
         </div>

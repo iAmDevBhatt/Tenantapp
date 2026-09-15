@@ -1,3 +1,17 @@
+export interface WriteOff {
+  id: string
+  invoiceId: string
+  amount: string
+  reason: string
+  writtenOffBy: string | null
+  writtenOffAt: string
+}
+
+export interface WriteOffCreateInput {
+  amount: string
+  reason: string
+}
+
 export interface Invoice {
   id: string
   tenantId: string
@@ -26,6 +40,8 @@ export interface Invoice {
   paid: boolean
   paidDate: string | null
   createdAt: string
+  writeOffs: WriteOff[]
+  netPayable: string
 }
 
 export interface InvoiceCreateInput {

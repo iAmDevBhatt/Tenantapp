@@ -1,5 +1,8 @@
-import { FormEvent, useState } from 'react'
+import { FormEvent, useEffect, useState } from 'react'
 import { TenantInput } from '@/types/tenant'
+import { Property } from '@/types/property'
+import { propertiesApi } from '@/api/properties'
+import { useLabels } from '@/hooks/useLabels'
 
 interface Props {
   initial?: Partial<TenantInput>
@@ -11,15 +14,52 @@ interface Props {
 const empty: TenantInput = {
   name: '', phone: '', propertyAddress: '', monthlyRent: '0', roomRate: '',
   waterRate: '', waterDivisor: 1, upiId: '', moveInDate: new Date().toISOString().slice(0, 10),
+  flatId: null,
 }
 
 export default function TenantForm({ initial, submitLabel, onSubmit, onCancel }: Props) {
   const [form, setForm] = useState<TenantInput>({ ...empty, ...initial })
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [properties, setProperties] = useState<Property[]>([])
+  const { l } = useLabels()
+
+  // Determine the initially selected property from flatId
+  const [selectedPropertyId, setSelectedPropertyId] = useState<string>(() => {
+    if (initial?.flatId) {
+      // We'll resolve this once properties load
+      return '__pending__'
+    }
+    return ''
+  })
+
+  useEffect(() => {
+    propertiesApi.list().then((props) => {
+      setProperties(props)
+      if (initial?.flatId) {
+        const ownerProp = props.find((p) => p.flats.some((f) => f.id === initial.flatId))
+        setSelectedPropertyId(ownerProp?.id ?? '')
+      }
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   function set<K extends keyof TenantInput>(key: K, value: TenantInput[K]) {
     setForm((f) => ({ ...f, [key]: value }))
+  }
+
+  function handlePropertyChange(propertyId: string) {
+    setSelectedPropertyId(propertyId)
+    set('flatId', null)
+  }
+
+  function handleFlatChange(flatId: string) {
+    const flat = properties.find((p) => p.id === selectedPropertyId)?.flats.find((f) => f.id === flatId)
+    const prop = properties.find((p) => p.id === selectedPropertyId)
+    set('flatId', flatId || null)
+    if (flat && prop) {
+      set('propertyAddress', `${prop.address} - ${flat.label}`)
+    }
   }
 
   async function handleSubmit(e: FormEvent) {
@@ -29,11 +69,13 @@ export default function TenantForm({ initial, submitLabel, onSubmit, onCancel }:
     try {
       await onSubmit(form)
     } catch (err: any) {
-      setError(err?.response?.data?.detail || 'Something went wrong')
+      setError(err?.response?.data?.detail || l('error.generic', 'Something went wrong'))
     } finally {
       setSaving(false)
     }
   }
+
+  const selectedProperty = properties.find((p) => p.id === selectedPropertyId)
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
@@ -41,20 +83,53 @@ export default function TenantForm({ initial, submitLabel, onSubmit, onCancel }:
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div>
-          <label className="field-label">Name</label>
+          <label className="field-label">{l('form.label.name', 'Name')}</label>
           <input className="field-input" required value={form.name} onChange={(e) => set('name', e.target.value)} />
         </div>
         <div>
-          <label className="field-label">Phone (for WhatsApp)</label>
+          <label className="field-label">{l('form.label.phone', 'Phone (for WhatsApp)')}</label>
           <input
-            className="field-input" placeholder="+91XXXXXXXXXX"
+            className="field-input" placeholder={l('form.placeholder.phone', '+91XXXXXXXXXX')}
             value={form.phone ?? ''} onChange={(e) => set('phone', e.target.value)}
           />
         </div>
       </div>
 
+      {properties.length > 0 && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div>
+            <label className="field-label">{l('form.label.property', 'Property')}</label>
+            <select
+              className="field-input"
+              value={selectedPropertyId === '__pending__' ? '' : selectedPropertyId}
+              onChange={(e) => handlePropertyChange(e.target.value)}
+            >
+              <option value="">{l('form.option.noProperty', '— None / Custom address —')}</option>
+              {properties.map((p) => (
+                <option key={p.id} value={p.id}>{p.name}</option>
+              ))}
+            </select>
+          </div>
+          {selectedPropertyId && selectedPropertyId !== '__pending__' && selectedProperty && (
+            <div>
+              <label className="field-label">{l('form.label.flat', 'Flat / Unit')}</label>
+              <select
+                className="field-input"
+                value={form.flatId ?? ''}
+                onChange={(e) => handleFlatChange(e.target.value)}
+              >
+                <option value="">{l('form.option.noFlat', '— Select flat —')}</option>
+                {selectedProperty.flats.map((f) => (
+                  <option key={f.id} value={f.id}>{f.label}</option>
+                ))}
+              </select>
+            </div>
+          )}
+        </div>
+      )}
+
       <div>
-        <label className="field-label">Property Address</label>
+        <label className="field-label">{l('form.label.propertyAddress', 'Property Address')}</label>
         <textarea
           className="field-input min-h-[80px] py-2" required rows={3}
           value={form.propertyAddress} onChange={(e) => set('propertyAddress', e.target.value)}
@@ -63,44 +138,44 @@ export default function TenantForm({ initial, submitLabel, onSubmit, onCancel }:
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div>
-          <label className="field-label">Monthly Rent (₹)</label>
+          <label className="field-label">{l('form.label.monthlyRent', 'Monthly Rent (₹)')}</label>
           <input
             className="field-input" type="number" step="0.01" required
             value={form.monthlyRent} onChange={(e) => set('monthlyRent', e.target.value)}
           />
         </div>
         <div>
-          <label className="field-label">Move-in Date</label>
+          <label className="field-label">{l('form.label.moveInDate', 'Move-in Date')}</label>
           <input
             className="field-input" type="date" required
             value={form.moveInDate} onChange={(e) => set('moveInDate', e.target.value)}
           />
         </div>
         <div>
-          <label className="field-label">Room Meter Rate (₹/unit)</label>
+          <label className="field-label">{l('form.label.roomRate', 'Room Meter Rate (₹/unit)')}</label>
           <input
             className="field-input" type="number" step="0.01" required
             value={form.roomRate} onChange={(e) => set('roomRate', e.target.value)}
           />
         </div>
         <div>
-          <label className="field-label">Water Meter Rate (₹/unit)</label>
+          <label className="field-label">{l('form.label.waterRate', 'Water Meter Rate (₹/unit)')}</label>
           <input
             className="field-input" type="number" step="0.01" required
             value={form.waterRate} onChange={(e) => set('waterRate', e.target.value)}
           />
         </div>
         <div>
-          <label className="field-label">Water Meter Shared By (tenants)</label>
+          <label className="field-label">{l('form.label.waterDivisor', 'Water Meter Shared By (tenants)')}</label>
           <input
             className="field-input" type="number" min={1} step="1" required
             value={form.waterDivisor} onChange={(e) => set('waterDivisor', parseInt(e.target.value || '1', 10))}
           />
         </div>
         <div>
-          <label className="field-label">UPI ID</label>
+          <label className="field-label">{l('form.label.upiId', 'UPI ID')}</label>
           <input
-            className="field-input" placeholder="name@bank"
+            className="field-input" placeholder={l('form.placeholder.upiId', 'name@bank')}
             value={form.upiId ?? ''} onChange={(e) => set('upiId', e.target.value)}
           />
         </div>
@@ -108,11 +183,11 @@ export default function TenantForm({ initial, submitLabel, onSubmit, onCancel }:
 
       <div className="flex gap-3 pt-2">
         <button type="submit" className="btn-primary" disabled={saving}>
-          {saving ? 'Saving…' : submitLabel}
+          {saving ? l('btn.saving', 'Saving…') : submitLabel}
         </button>
         {onCancel && (
           <button type="button" className="btn-secondary" onClick={onCancel} disabled={saving}>
-            Cancel
+            {l('btn.cancel', 'Cancel')}
           </button>
         )}
       </div>

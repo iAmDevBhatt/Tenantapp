@@ -1,5 +1,5 @@
 import { adminClient } from './adminClient'
-import { Invoice, InvoiceCreateInput } from '@/types/invoice'
+import { Invoice, InvoiceCreateInput, WriteOffCreateInput } from '@/types/invoice'
 
 export const invoicesApi = {
   listForTenant: (tenantId: string) =>
@@ -17,6 +17,12 @@ export const invoicesApi = {
     adminClient.post<Invoice>(`/invoices/${id}/toggle-paid`, { paid, paidDate }).then((r) => r.data),
 
   delete: (id: string) => adminClient.delete(`/invoices/${id}`),
+
+  addWriteOff: (invoiceId: string, data: WriteOffCreateInput) =>
+    adminClient.post<Invoice>(`/invoices/${invoiceId}/writeoffs`, data).then((r) => r.data),
+
+  deleteWriteOff: (invoiceId: string, writeOffId: string) =>
+    adminClient.delete<Invoice>(`/invoices/${invoiceId}/writeoffs/${writeOffId}`).then((r) => r.data),
 
   pdfUrl: (id: string) => `/invoices/${id}/pdf`,
   qrUrl: (id: string) => `/invoices/${id}/qr.png`,

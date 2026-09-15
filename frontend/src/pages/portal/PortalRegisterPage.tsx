@@ -2,12 +2,14 @@ import { FormEvent, useEffect, useState } from 'react'
 import { Navigate, useNavigate, useSearchParams } from 'react-router-dom'
 import { portalAuthApi } from '@/api/portalAuth'
 import { useTenantAuth } from '@/hooks/useAuth'
+import { useLabels } from '@/hooks/useLabels'
 
 export default function PortalRegisterPage() {
   const { authed, register } = useTenantAuth()
   const navigate = useNavigate()
   const [params] = useSearchParams()
   const code = params.get('code') || ''
+  const { l } = useLabels()
 
   const [checking, setChecking] = useState(true)
   const [valid, setValid] = useState(false)
@@ -44,7 +46,7 @@ export default function PortalRegisterPage() {
       await register(code, username, password)
       navigate('/portal')
     } catch (err: any) {
-      setError(err?.response?.data?.detail || 'Could not create your account')
+      setError(err?.response?.data?.detail || l('error.createAccount', 'Could not create your account'))
     } finally {
       setLoading(false)
     }
@@ -55,34 +57,39 @@ export default function PortalRegisterPage() {
       <div className="card w-full max-w-sm p-6 sm:p-8">
         <div className="text-center mb-6">
           <div className="text-3xl mb-1">🏠</div>
-          <h1 className="text-xl font-bold text-brand-800 dark:text-brand-200">Rent Ledger</h1>
-          <p className="text-sm text-slate-500">Set up your tenant portal login</p>
+          <h1 className="text-xl font-bold text-brand-800 dark:text-brand-200">{l('app.name', 'Rent Ledger')}</h1>
+          <p className="text-sm text-slate-500">{l('register.subtitle', 'Set up your tenant portal login')}</p>
         </div>
 
         {checking ? (
-          <p className="text-center text-slate-500 text-sm">Checking invite link…</p>
+          <p className="text-center text-slate-500 text-sm">{l('register.checkingInvite', 'Checking invite link…')}</p>
         ) : !code || !valid ? (
           <div className="rounded-lg bg-red-50 text-red-700 px-3 py-2 text-sm">
-            This invite link is invalid or has expired. Ask your landlord to send you a new one.
+            {l('error.invalidInvite', 'This invite link is invalid or has expired. Ask your landlord to send you a new one.')}
           </div>
         ) : alreadyRegistered ? (
           <div className="rounded-lg bg-amber-50 text-amber-700 px-3 py-2 text-sm">
-            This tenant already has a portal login. <a className="underline" href="/portal/login">Sign in instead</a>.
+            {l('register.alreadyRegistered', 'This tenant already has a portal login.')}{' '}
+            <a className="underline" href="/portal/login">{l('register.signInInstead', 'Sign in instead')}</a>.
           </div>
         ) : (
           <form onSubmit={handleSubmit} className="space-y-4">
-            {tenantName && <p className="text-sm text-slate-600 dark:text-slate-400">Welcome, {tenantName}!</p>}
+            {tenantName && (
+              <p className="text-sm text-slate-600 dark:text-slate-400">
+                {l('register.welcome', 'Welcome, {tenantName}!').replace('{tenantName}', tenantName)}
+              </p>
+            )}
             {error && <div className="rounded-lg bg-red-50 text-red-700 px-3 py-2 text-sm">{error}</div>}
             <div>
-              <label className="field-label">Choose a username</label>
+              <label className="field-label">{l('form.label.chooseUsername', 'Choose a username')}</label>
               <input className="field-input" required autoFocus value={username} onChange={(e) => setUsername(e.target.value)} />
             </div>
             <div>
-              <label className="field-label">Choose a password</label>
+              <label className="field-label">{l('form.label.choosePassword', 'Choose a password')}</label>
               <input className="field-input" type="password" required minLength={8} value={password} onChange={(e) => setPassword(e.target.value)} />
             </div>
             <button type="submit" className="btn-primary w-full" disabled={loading}>
-              {loading ? 'Creating account…' : 'Create Account'}
+              {loading ? l('btn.creatingAccount', 'Creating account…') : l('btn.createAccount', 'Create Account')}
             </button>
           </form>
         )}

@@ -5,8 +5,10 @@ from backend.models.tenant_document import TenantDocument
 from backend.models.tenant_invite import TenantInvite
 from backend.models.tenant_user import TenantUser
 from backend.models.invoice import Invoice
+from backend.models.invoice_writeoff import InvoiceWriteOff
 from backend.models.meter_submission import MeterSubmission
 from backend.models.settings import AppSettings
+from backend.models.property import Property, PropertyFlat
 
 __all__ = [
     "AdminUser",
@@ -15,6 +17,9 @@ __all__ = [
     "TenantInvite",
     "TenantUser",
     "Invoice",
+    "InvoiceWriteOff",
     "MeterSubmission",
     "AppSettings",
+    "Property",
+    "PropertyFlat",
 ]

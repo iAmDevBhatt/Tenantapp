@@ -4,11 +4,14 @@ A self-hosted web app that replaces a landlord's Google Sheet workflow for gener
 
 ## Features
 
-- **Tenant management** — active/inactive (moved-out) tenants, per-tenant documents (lease, ID proof, photos), rates, UPI ID, phone.
-- **New invoice** — auto-fills start readings from the last invoice and previous dues from the last unpaid invoice; live-computed preview; saved as an immutable snapshot.
+- **Tenant management** — active/inactive (moved-out) tenants, per-tenant documents (lease, ID proof, photos), rates, UPI ID, phone. Upload a passport-size profile photo (DP) per tenant — shown as a circular avatar on the dashboard and tenant profile page.
+- **Properties & Flats** — define multiple properties, each with named flats/units. When adding or editing a tenant, pick a Property → Flat from dropdowns to auto-fill the property address (still manually editable).
+- **New invoice** — auto-fills start readings from the last invoice and previous dues from the last unpaid invoice (net of any write-offs); live-computed preview; saved as an immutable snapshot.
 - **Invoice history** — per tenant, toggle paid/unpaid, re-download any past invoice's PDF (always renders from its own saved snapshot, never today's rates), delete mistaken entries.
+- **Invoice write-offs** — write off part or all of an outstanding invoice (with a required reason) without changing the original total. Net payable = total − Σ write-offs. Each write-off is audited (amount, reason, author, timestamp) and can be undone individually.
 - **Invoice PDF** — server-rendered (WeasyPrint), blue-and-white printable design matching the reference layout, with a dynamic UPI QR code (amount pre-filled).
-- **Send via WhatsApp** — opens a prefilled `wa.me` chat with the tenant; download the PDF first and attach it manually (WhatsApp click-to-chat links can't attach files).
+- **Send via WhatsApp** — opens a prefilled `wa.me` chat with the tenant; the message uses the net payable when write-offs exist.
+- **Download all documents (zip)** — one-click zip of all a tenant's uploaded documents plus their profile photo.
 - **Tenant portal** — each tenant gets their own read-only login (self-registered via a landlord-issued invite link) to view and download their own invoice history.
 
 ## Tech stack
@@ -70,7 +73,7 @@ All state lives on two named Docker volumes:
 | Volume | Contains | Mounted at |
 |---|---|---|
 | `app_data` | The SQLite database file (`app.db`) | `/app/data` |
-| `uploads_data` | Tenant documents, the property photo | `/app/uploads` |
+| `uploads_data` | Tenant documents, profile photos, the property photo | `/app/uploads` |
 
 `docker compose down` (without `-v`) and image rebuilds/redeploys never touch these volumes — data survives. Only `docker compose down -v` deletes them.
 

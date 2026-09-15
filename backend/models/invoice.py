@@ -48,3 +48,4 @@ class Invoice(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
 
     tenant = relationship("Tenant", back_populates="invoices")
+    writeoffs = relationship("InvoiceWriteOff", cascade="all, delete-orphan", back_populates="invoice", order_by="InvoiceWriteOff.written_off_at")

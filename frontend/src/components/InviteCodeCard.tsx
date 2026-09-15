@@ -1,11 +1,13 @@
 import { useEffect, useState } from 'react'
 import { invitesApi } from '@/api/invites'
 import { InviteStatus } from '@/types/tenant'
+import { useLabels } from '@/hooks/useLabels'
 
 export default function InviteCodeCard({ tenantId }: { tenantId: string }) {
   const [status, setStatus] = useState<InviteStatus | null>(null)
   const [loading, setLoading] = useState(true)
   const [copied, setCopied] = useState(false)
+  const { l } = useLabels()
 
   async function load() {
     setLoading(true)
@@ -41,12 +43,12 @@ export default function InviteCodeCard({ tenantId }: { tenantId: string }) {
     }
   }
 
-  if (loading) return <p className="text-sm text-slate-500">Loading…</p>
+  if (loading) return <p className="text-sm text-slate-500">{l('status.loading', 'Loading…')}</p>
 
   if (status?.hasRegistered) {
     return (
       <p className="text-sm text-slate-600 dark:text-slate-400">
-        This tenant already has a portal login. They can sign in at <code>/portal/login</code>.
+        {l('invite.alreadyRegistered', 'This tenant already has a portal login. They can sign in at /portal/login.')}
       </p>
     )
   }
@@ -54,7 +56,7 @@ export default function InviteCodeCard({ tenantId }: { tenantId: string }) {
   return (
     <div className="space-y-3">
       <p className="text-sm text-slate-600 dark:text-slate-400">
-        Generate an invite link so this tenant can create their own portal login to view their invoices.
+        {l('invite.description', 'Generate an invite link so this tenant can create their own portal login to view their invoices.')}
       </p>
       {status?.invite && (
         <div className="rounded-lg bg-slate-50 dark:bg-slate-800 px-3 py-2 text-sm break-all">
@@ -63,17 +65,18 @@ export default function InviteCodeCard({ tenantId }: { tenantId: string }) {
       )}
       <div className="flex flex-wrap gap-2">
         <button className="btn-primary btn-compact" onClick={handleGenerate}>
-          {status?.invite ? 'Regenerate invite link' : 'Generate invite link'}
+          {status?.invite ? l('btn.regenerateInvite', 'Regenerate invite link') : l('btn.generateInvite', 'Generate invite link')}
         </button>
         {status?.invite && (
           <button className="btn-secondary btn-compact" onClick={() => handleCopy(status.invite!.code)}>
-            {copied ? 'Copied!' : 'Copy link'}
+            {copied ? l('btn.copied', 'Copied!') : l('btn.copyLink', 'Copy link')}
           </button>
         )}
       </div>
       {status?.invite && (
         <p className="text-xs text-slate-500">
-          Expires {new Date(status.invite.expiresAt).toLocaleDateString()}. Regenerating replaces this link.
+          {l('invite.expires', 'Expires {date}.').replace('{date}', new Date(status.invite.expiresAt).toLocaleDateString())}
+          {' '}{l('invite.regenerateNote', 'Regenerating replaces this link.')}
         </p>
       )}
     </div>

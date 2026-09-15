@@ -9,7 +9,7 @@ import backend.models  # noqa: F401 -- import side effect: registers all tables 
 
 from backend.routers import (
     auth, portal_auth, settings as settings_router, aggregate, tenants, invoices, portal,
-    catchall_router,
+    properties, catchall_router,
 )
 
 if not settings.DEBUG and (not settings.JWT_SECRET or settings.JWT_SECRET == "change-me"):
@@ -37,6 +37,7 @@ app.include_router(settings_router.router)
 app.include_router(aggregate.router)
 app.include_router(tenants.router)
 app.include_router(invoices.router)
+app.include_router(properties.router)
 app.include_router(portal.router)
 
 

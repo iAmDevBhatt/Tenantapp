@@ -1,6 +1,7 @@
 import { FormEvent, useState } from 'react'
 import { Navigate, useNavigate } from 'react-router-dom'
 import { useAdminAuth } from '@/hooks/useAuth'
+import { useLabels } from '@/hooks/useLabels'
 
 export default function LoginPage() {
   const { authed, login } = useAdminAuth()
@@ -9,6 +10,7 @@ export default function LoginPage() {
   const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
+  const { l } = useLabels()
 
   if (authed) return <Navigate to="/" replace />
 
@@ -20,7 +22,7 @@ export default function LoginPage() {
       await login(username, password)
       navigate('/')
     } catch {
-      setError('Invalid username or password')
+      setError(l('error.invalidCredentials', 'Invalid username or password'))
     } finally {
       setLoading(false)
     }
@@ -31,25 +33,28 @@ export default function LoginPage() {
       <div className="card w-full max-w-sm p-6 sm:p-8">
         <div className="text-center mb-6">
           <div className="text-3xl mb-1">🏠</div>
-          <h1 className="text-xl font-bold text-brand-800 dark:text-brand-200">Rent Ledger</h1>
-          <p className="text-sm text-slate-500">Landlord sign in</p>
+          <h1 className="text-xl font-bold text-brand-800 dark:text-brand-200">{l('app.name', 'Rent Ledger')}</h1>
+          <p className="text-sm text-slate-500">{l('login.admin.subtitle', 'Landlord sign in')}</p>
         </div>
         <form onSubmit={handleSubmit} className="space-y-4">
           {error && <div className="rounded-lg bg-red-50 text-red-700 px-3 py-2 text-sm">{error}</div>}
           <div>
-            <label className="field-label">Username</label>
+            <label className="field-label">{l('form.label.username', 'Username')}</label>
             <input className="field-input" required autoFocus value={username} onChange={(e) => setUsername(e.target.value)} />
           </div>
           <div>
-            <label className="field-label">Password</label>
+            <label className="field-label">{l('form.label.password', 'Password')}</label>
             <input className="field-input" type="password" required value={password} onChange={(e) => setPassword(e.target.value)} />
           </div>
           <button type="submit" className="btn-primary w-full" disabled={loading}>
-            {loading ? 'Signing in…' : 'Sign in'}
+            {loading ? l('btn.signingIn', 'Signing in…') : l('btn.signIn', 'Sign in')}
           </button>
         </form>
         <p className="text-center text-xs text-slate-400 mt-6">
-          Tenant? <a className="text-brand-600 underline" href="/portal/login">Sign in to the tenant portal</a>
+          {l('login.admin.tenantPrompt', 'Tenant?')}{' '}
+          <a className="text-brand-600 underline" href="/portal/login">
+            {l('login.admin.tenantPortalLink', 'Sign in to the tenant portal')}
+          </a>
         </p>
       </div>
     </div>

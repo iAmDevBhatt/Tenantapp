@@ -11,6 +11,7 @@ from backend.database import get_db
 from backend.models.tenant_user import TenantUser
 from backend.schemas.portal import PortalMeOut
 from backend.schemas.invoice import InvoiceOut
+from backend.schemas.invoice_writeoff import WriteOffOut
 from backend.services import invoice_service, settings_service, qr_service, tenant_service
 from backend.services.pdf_service import render_invoice_pdf, PdfUnavailableError, build_invoice_view
 
@@ -18,6 +19,13 @@ router = APIRouter(prefix="/api/portal", tags=["portal"], dependencies=[Depends(
 
 
 def _out(inv) -> InvoiceOut:
+    write_offs = [
+        WriteOffOut(
+            id=wo.id, invoiceId=wo.invoice_id, amount=wo.amount,
+            reason=wo.reason, writtenOffBy=wo.written_off_by, writtenOffAt=wo.written_off_at,
+        )
+        for wo in inv.writeoffs
+    ]
     return InvoiceOut(
         id=inv.id, tenantId=inv.tenant_id, invoiceDate=inv.invoice_date,
         roomStart=inv.room_start, roomEnd=inv.room_end, waterStart=inv.water_start,
@@ -27,6 +35,8 @@ def _out(inv) -> InvoiceOut:
         roomUsage=inv.room_usage, waterUsage=inv.water_usage, roomAmount=inv.room_amount,
         waterAmount=inv.water_amount, totalPayable=inv.total_payable,
         paid=inv.paid, paidDate=inv.paid_date, createdAt=inv.created_at,
+        writeOffs=write_offs,
+        netPayable=invoice_service.net_payable(inv),
     )
 
 

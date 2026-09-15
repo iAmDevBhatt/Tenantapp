@@ -1,16 +1,18 @@
 import { NavLink, Outlet, useNavigate } from 'react-router-dom'
 import { useState } from 'react'
 import { useAdminAuth } from '@/hooks/useAuth'
-
-const navItems = [
-  { to: '/', label: 'Dashboard', end: true },
-  { to: '/settings', label: 'Settings', end: true },
-]
+import { useLabels } from '@/hooks/useLabels'
 
 export default function AdminLayout() {
   const { logout } = useAdminAuth()
   const navigate = useNavigate()
   const [menuOpen, setMenuOpen] = useState(false)
+  const { l } = useLabels()
+
+  const navItems = [
+    { to: '/', label: l('nav.dashboard', 'Dashboard'), end: true },
+    { to: '/settings', label: l('nav.settings', 'Settings'), end: true },
+  ]
 
   function handleLogout() {
     logout()
@@ -22,7 +24,7 @@ export default function AdminLayout() {
       <header className="bg-brand-700 text-white sticky top-0 z-20">
         <div className="page-pad flex items-center justify-between max-w-5xl mx-auto w-full">
           <div className="flex items-center gap-2 font-bold text-lg">
-            <span>🏠</span> Rent Ledger
+            <span>🏠</span> {l('app.name', 'Rent Ledger')}
           </div>
 
           <nav className="hidden lg:flex items-center gap-1">
@@ -39,7 +41,7 @@ export default function AdminLayout() {
               </NavLink>
             ))}
             <button className="btn-compact rounded-lg px-3 py-2 hover:bg-brand-600" onClick={handleLogout}>
-              Log out
+              {l('btn.logout', 'Log out')}
             </button>
           </nav>
 
@@ -69,7 +71,7 @@ export default function AdminLayout() {
               className="px-4 py-3 min-h-[44px] flex items-center text-left hover:bg-brand-600"
               onClick={handleLogout}
             >
-              Log out
+              {l('btn.logout', 'Log out')}
             </button>
           </div>
         )}

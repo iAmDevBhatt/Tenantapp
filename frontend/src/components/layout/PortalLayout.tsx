@@ -1,9 +1,11 @@
 import { Outlet, useNavigate } from 'react-router-dom'
 import { useTenantAuth } from '@/hooks/useAuth'
+import { useLabels } from '@/hooks/useLabels'
 
 export default function PortalLayout() {
   const { logout } = useTenantAuth()
   const navigate = useNavigate()
+  const { l } = useLabels()
 
   function handleLogout() {
     logout()
@@ -15,10 +17,10 @@ export default function PortalLayout() {
       <header className="bg-brand-700 text-white sticky top-0 z-20">
         <div className="page-pad flex items-center justify-between max-w-3xl mx-auto w-full">
           <div className="flex items-center gap-2 font-bold text-lg">
-            <span>🏠</span> Rent Ledger
+            <span>🏠</span> {l('app.name', 'Rent Ledger')}
           </div>
           <button className="btn-compact rounded-lg px-3 py-2 hover:bg-brand-600" onClick={handleLogout}>
-            Log out
+            {l('btn.logout', 'Log out')}
           </button>
         </div>
       </header>

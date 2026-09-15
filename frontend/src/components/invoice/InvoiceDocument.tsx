@@ -1,5 +1,6 @@
 import { Invoice } from '@/types/invoice'
 import { formatINR } from '@/utils/formulas'
+import { useLabels } from '@/hooks/useLabels'
 import './invoice-print.css'
 
 interface Props {
@@ -16,6 +17,8 @@ interface Props {
  * this subtree) so it looks like printed paper regardless of the app's own
  * light/dark theme. */
 export default function InvoiceDocument({ invoice, tenantName, tenantAddress, qrSrc, propertyPhotoSrc }: Props) {
+  const { l } = useLabels()
+
   const invoiceDate = new Date(invoice.invoiceDate).toLocaleDateString('en-IN', {
     day: '2-digit', month: 'long', year: 'numeric',
   })
@@ -29,31 +32,31 @@ export default function InvoiceDocument({ invoice, tenantName, tenantAddress, qr
           <div className="inv-banner-icon">🏠</div>
         )}
         <div>
-          <h1>Rent &amp; Utilities Invoice</h1>
+          <h1>{l('invoice.title', 'Rent & Utilities Invoice')}</h1>
           <div className="inv-date">{invoiceDate}</div>
         </div>
       </div>
 
       <div className="inv-content">
-        <div className="inv-section-title">Tenant Information</div>
+        <div className="inv-section-title">{l('invoice.section.tenantInfo', 'Tenant Information')}</div>
         <p className="inv-tenant-name">{tenantName}</p>
         <p className="inv-tenant-address">{tenantAddress}</p>
 
-        <div className="inv-section-title">Utility Charges</div>
+        <div className="inv-section-title">{l('invoice.section.utilityCharges', 'Utility Charges')}</div>
         <table className="inv-table">
           <thead>
             <tr>
-              <th>Description</th>
-              <th className="inv-num">Start</th>
-              <th className="inv-num">End</th>
-              <th className="inv-num">Usage</th>
-              <th className="inv-num">Rate</th>
-              <th className="inv-num">Amount</th>
+              <th>{l('invoice.table.header.description', 'Description')}</th>
+              <th className="inv-num">{l('invoice.table.header.start', 'Start')}</th>
+              <th className="inv-num">{l('invoice.table.header.end', 'End')}</th>
+              <th className="inv-num">{l('invoice.table.header.usage', 'Usage')}</th>
+              <th className="inv-num">{l('invoice.table.header.rate', 'Rate')}</th>
+              <th className="inv-num">{l('invoice.table.header.amount', 'Amount')}</th>
             </tr>
           </thead>
           <tbody>
             <tr>
-              <td className="inv-desc">Room Meter (A)</td>
+              <td className="inv-desc">{l('invoice.row.roomMeter', 'Room Meter (A)')}</td>
               <td className="inv-num">{invoice.roomStart}</td>
               <td className="inv-num">{invoice.roomEnd}</td>
               <td className="inv-num">{invoice.roomUsage}</td>
@@ -61,7 +64,7 @@ export default function InvoiceDocument({ invoice, tenantName, tenantAddress, qr
               <td className="inv-num">{formatINR(invoice.roomAmount)}</td>
             </tr>
             <tr>
-              <td className="inv-desc">Water Meter (B)</td>
+              <td className="inv-desc">{l('invoice.row.waterMeter', 'Water Meter (B)')}</td>
               <td className="inv-num">{invoice.waterStart}</td>
               <td className="inv-num">{invoice.waterEnd}</td>
               <td className="inv-num">{invoice.waterUsage}</td>
@@ -71,36 +74,38 @@ export default function InvoiceDocument({ invoice, tenantName, tenantAddress, qr
           </tbody>
         </table>
 
-        <div className="inv-section-title">Rent &amp; Dues</div>
+        <div className="inv-section-title">{l('invoice.section.rentAndDues', 'Rent & Dues')}</div>
         <div className="inv-dues-row">
-          <span className="inv-label">Monthly Rent (C)</span>
+          <span className="inv-label">{l('invoice.label.monthlyRent', 'Monthly Rent (C)')}</span>
           <span className="inv-value">{formatINR(invoice.monthlyRent)}</span>
         </div>
         <div className="inv-dues-row">
-          <span className="inv-label">Previous Dues (D)</span>
+          <span className="inv-label">{l('invoice.label.previousDues', 'Previous Dues (D)')}</span>
           <span className="inv-value">{formatINR(invoice.previousDues)}</span>
         </div>
         <div className="inv-total-bar">
-          <span className="inv-label">Total Payable (A+B+C+D)</span>
+          <span className="inv-label">{l('invoice.label.totalPayable', 'Total Payable (A+B+C+D)')}</span>
           <span className="inv-value">{formatINR(invoice.totalPayable)}</span>
         </div>
 
         <div className="inv-payment-area">
           <div>
-            <div className="inv-upi-label">Pay via UPI</div>
-            <div className="inv-upi-id">{invoice.upiId || 'Contact landlord for UPI ID'}</div>
+            <div className="inv-upi-label">{l('invoice.label.payViaUpi', 'Pay via UPI')}</div>
+            <div className="inv-upi-id">{invoice.upiId || l('invoice.label.contactLandlord', 'Contact landlord for UPI ID')}</div>
           </div>
           {qrSrc ? (
-            <img className="inv-qr" src={qrSrc} alt="UPI payment QR code" />
+            <img className="inv-qr" src={qrSrc} alt={l('invoice.qr.altText', 'UPI payment QR code')} />
           ) : (
-            <div className="inv-qr-placeholder">QR loading…</div>
+            <div className="inv-qr-placeholder">{l('invoice.qr.loading', 'QR loading…')}</div>
           )}
         </div>
 
         <div className="inv-notes">
-          Payment is due within {invoice.dueDays} day{invoice.dueDays !== 1 ? 's' : ''} of the invoice date.
+          {l('invoice.notes.dueDate', 'Payment is due within {dueDays} day(s) of the invoice date.')
+            .replace('{dueDays}', String(invoice.dueDays))}
           {invoice.waterDivisor > 1 && (
-            <> Water usage on this invoice was divided by {invoice.waterDivisor} (shared meter).</>
+            <> {l('invoice.notes.sharedMeter', 'Water usage on this invoice was divided by {waterDivisor} (shared meter).')
+              .replace('{waterDivisor}', String(invoice.waterDivisor))}</>
           )}
         </div>
       </div>

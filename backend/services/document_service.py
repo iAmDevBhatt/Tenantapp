@@ -71,3 +71,62 @@ def delete_document(db: Session, doc: TenantDocument) -> None:
         os.remove(path)
     db.delete(doc)
     db.commit()
+
+
+def save_profile_photo(db: Session, tenant, upload: UploadFile):
+    """Save or replace the tenant's passport-size profile photo."""
+    if tenant.profile_photo_path:
+        old = os.path.join(settings.UPLOADS_DIR, tenant.profile_photo_path)
+        if os.path.exists(old):
+            os.remove(old)
+
+    ext = os.path.splitext(upload.filename or "photo.jpg")[1] or ".jpg"
+    stored_name = f"profile_{uuid.uuid4()}{ext}"
+    tenant_dir = _tenant_dir(tenant.id)
+    abs_path = os.path.join(tenant_dir, stored_name)
+
+    with open(abs_path, "wb") as f:
+        while chunk := upload.file.read(1024 * 1024):
+            f.write(chunk)
+
+    tenant.profile_photo_path = os.path.join(DOCS_SUBDIR, tenant.id, stored_name)
+    db.commit()
+    db.refresh(tenant)
+    return tenant
+
+
+def delete_profile_photo(db: Session, tenant):
+    if tenant.profile_photo_path:
+        path = os.path.join(settings.UPLOADS_DIR, tenant.profile_photo_path)
+        if os.path.exists(path):
+            os.remove(path)
+        tenant.profile_photo_path = None
+        db.commit()
+        db.refresh(tenant)
+    return tenant
+
+
+def profile_photo_absolute_path(tenant) -> str | None:
+    if not tenant.profile_photo_path:
+        return None
+    return os.path.join(settings.UPLOADS_DIR, tenant.profile_photo_path)
+
+
+def build_tenant_zip(db: Session, tenant) -> bytes:
+    """Return an in-memory zip containing all documents + profile photo."""
+    import io
+    import zipfile
+
+    docs = list_for_tenant(db, tenant.id)
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+        for doc in docs:
+            path = absolute_path(doc)
+            if os.path.exists(path):
+                zf.write(path, doc.original_filename)
+        if tenant.profile_photo_path:
+            pp = os.path.join(settings.UPLOADS_DIR, tenant.profile_photo_path)
+            if os.path.exists(pp):
+                ext = os.path.splitext(pp)[1]
+                zf.write(pp, f"profile_photo{ext}")
+    return buf.getvalue()

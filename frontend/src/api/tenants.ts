@@ -19,4 +19,19 @@ export const tenantsApi = {
 
   nextInvoiceDefaults: (id: string) =>
     adminClient.get<NextInvoiceDefaults>(`/tenants/${id}/next-invoice-defaults`).then((r) => r.data),
+
+  uploadProfilePhoto: (tenantId: string, file: File) => {
+    const form = new FormData()
+    form.append('file', file)
+    return adminClient
+      .post<Tenant>(`/tenants/${tenantId}/profile-photo`, form)
+      .then((r) => r.data)
+  },
+
+  deleteProfilePhoto: (tenantId: string) =>
+    adminClient.delete<Tenant>(`/tenants/${tenantId}/profile-photo`).then((r) => r.data),
+
+  profilePhotoUrl: (tenantId: string) => `/tenants/${tenantId}/profile-photo`,
+
+  downloadAllDocsUrl: (tenantId: string) => `/tenants/${tenantId}/documents/download-all`,
 }

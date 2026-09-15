@@ -6,6 +6,7 @@ import { Invoice } from '@/types/invoice'
 import { PortalMe } from '@/types/settings'
 import { fetchAuthedBlob, triggerBlobDownload } from '@/utils/blob'
 import InvoiceDocument from '@/components/invoice/InvoiceDocument'
+import { useLabels } from '@/hooks/useLabels'
 
 export default function PortalInvoiceViewPage() {
   const { invoiceId } = useParams<{ invoiceId: string }>()
@@ -14,6 +15,7 @@ export default function PortalInvoiceViewPage() {
   const [qrSrc, setQrSrc] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [downloading, setDownloading] = useState(false)
+  const { l } = useLabels()
 
   useEffect(() => {
     if (!invoiceId) return
@@ -43,11 +45,11 @@ export default function PortalInvoiceViewPage() {
     }
   }
 
-  if (loading || !invoice || !me) return <p className="text-slate-500">Loading…</p>
+  if (loading || !invoice || !me) return <p className="text-slate-500">{l('status.loading', 'Loading…')}</p>
 
   return (
     <div className="space-y-4">
-      <Link to="/portal" className="text-sm text-brand-600 hover:underline">&larr; Your invoices</Link>
+      <Link to="/portal" className="text-sm text-brand-600 hover:underline">{l('nav.yourInvoices', '← Your invoices')}</Link>
 
       <div className="max-w-lg mx-auto">
         <InvoiceDocument invoice={invoice} tenantName={me.name} tenantAddress={me.propertyAddress} qrSrc={qrSrc} />
@@ -55,7 +57,7 @@ export default function PortalInvoiceViewPage() {
 
       <div className="max-w-lg mx-auto">
         <button className="btn-primary w-full" onClick={handleDownload} disabled={downloading}>
-          {downloading ? 'Preparing…' : 'Download PDF'}
+          {downloading ? l('btn.preparing', 'Preparing…') : l('btn.downloadPdf', 'Download PDF')}
         </button>
       </div>
     </div>

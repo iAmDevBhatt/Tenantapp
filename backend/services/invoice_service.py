@@ -75,10 +75,15 @@ def next_invoice_defaults(db: Session, tenant: Tenant) -> dict:
     )
     if not last:
         return {"room_start": _q(Decimal("0")), "water_start": _q(Decimal("0")), "previous_dues": _q(Decimal("0"))}
+    if not last.paid:
+        written_off = sum(Decimal(str(wo.amount)) for wo in last.writeoffs)
+        carry = _q(max(Decimal(str(last.total_payable)) - written_off, Decimal("0")))
+    else:
+        carry = _q(Decimal("0"))
     return {
         "room_start": last.room_end,
         "water_start": last.water_end,
-        "previous_dues": last.total_payable if not last.paid else _q(Decimal("0")),
+        "previous_dues": carry,
     }
 
 
@@ -196,3 +201,34 @@ def toggle_paid(db: Session, invoice: Invoice, paid: bool, paid_date: date | Non
 def delete_invoice(db: Session, invoice: Invoice) -> None:
     db.delete(invoice)
     db.commit()
+
+
+def net_payable(invoice: Invoice) -> Decimal:
+    total_written_off = sum(Decimal(str(wo.amount)) for wo in invoice.writeoffs)
+    return _q(Decimal(str(invoice.total_payable)) - total_written_off)
+
+
+def create_writeoff(db: Session, invoice: Invoice, amount: Decimal, reason: str, written_off_by: str | None) -> Invoice:
+    from backend.models.invoice_writeoff import InvoiceWriteOff
+    wo = InvoiceWriteOff(
+        invoice_id=invoice.id,
+        amount=_q(amount),
+        reason=reason,
+        written_off_by=written_off_by,
+    )
+    db.add(wo)
+    db.commit()
+    db.refresh(invoice)
+    return invoice
+
+
+def delete_writeoff(db: Session, invoice: Invoice, writeoff_id: str) -> Invoice:
+    from backend.models.invoice_writeoff import InvoiceWriteOff
+    from fastapi import HTTPException
+    wo = db.get(InvoiceWriteOff, writeoff_id)
+    if not wo or wo.invoice_id != invoice.id:
+        raise HTTPException(status_code=404, detail="Write-off not found")
+    db.delete(wo)
+    db.commit()
+    db.refresh(invoice)
+    return invoice

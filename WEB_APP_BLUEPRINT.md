@@ -298,10 +298,48 @@ opens an add-item form pre-filled).
 
 ### Labels/text externalization
 
+**This is a hard requirement, not a suggestion.** A stub hook that always returns the fallback is a violation — the file and the fetch must both exist from the first commit that uses any UI copy.
+
 All UI copy lives in one file (`public/labels.properties`), loaded via a
 `useLabels()`/`l(key)` hook. Keys are permanent; only values change. Makes
 copy edits and rebranding a non-code, non-rebuild change, and lets the same
 build serve multiple locales/brands later if needed.
+
+**What "done" looks like** — both of these must exist before any component uses `l(key, ...)`:
+
+1. `public/labels.properties` — a real file, committed, with one `key=value` line per UI string. Example:
+   ```
+   nav.tenants=Tenants
+   nav.invoices=Invoices
+   btn.save=Save
+   invoice.title=Rent & Utilities Invoice
+   ```
+
+2. `src/hooks/useLabels.ts` — fetches and parses the file, returns a real lookup (not a pass-through). Minimal working implementation:
+   ```ts
+   import { useEffect, useState } from 'react'
+
+   let cache: Record<string, string> | null = null
+
+   async function loadLabels(): Promise<Record<string, string>> {
+     if (cache) return cache
+     const text = await fetch('/labels.properties').then(r => r.text())
+     cache = Object.fromEntries(
+       text.split('\n')
+         .filter(line => line.includes('=') && !line.startsWith('#'))
+         .map(line => line.split('=').map(s => s.trim()) as [string, string])
+     )
+     return cache
+   }
+
+   export function useLabels() {
+     const [labels, setLabels] = useState<Record<string, string>>(cache ?? {})
+     useEffect(() => { loadLabels().then(setLabels) }, [])
+     return { l: (key: string, fallback: string) => labels[key] ?? fallback }
+   }
+   ```
+
+**Known past failure:** Rent Ledger shipped `useLabels` as a stub that always returned the fallback — the `key` parameter was accepted but ignored, and no `labels.properties` file was ever created. All copy stayed hardcoded inline in components, defeating the entire purpose of the hook. Do not repeat this.
 
 ---
 

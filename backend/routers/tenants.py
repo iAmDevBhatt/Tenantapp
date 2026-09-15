@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, UploadFile, File, Form
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 from sqlalchemy.orm import Session
 
 from backend.core.deps import get_current_admin
@@ -20,7 +20,10 @@ def _tenant_out(t) -> TenantOut:
         monthlyRent=t.monthly_rent, roomRate=t.room_rate, waterRate=t.water_rate,
         waterDivisor=t.water_divisor, upiId=t.upi_id, active=t.active,
         moveInDate=t.move_in_date, moveOutDate=t.move_out_date,
-        hasPortalAccount=t.tenant_user is not None, createdAt=t.created_at,
+        hasPortalAccount=t.tenant_user is not None,
+        hasProfilePhoto=bool(t.profile_photo_path),
+        flatId=t.flat_id,
+        createdAt=t.created_at,
     )
 
 
@@ -35,6 +38,7 @@ def create_tenant(body: TenantCreate, db: Session = Depends(get_db)):
         "name": body.name, "phone": body.phone, "property_address": body.propertyAddress,
         "monthly_rent": body.monthlyRent, "room_rate": body.roomRate, "water_rate": body.waterRate,
         "water_divisor": body.waterDivisor, "upi_id": body.upiId, "move_in_date": body.moveInDate,
+        "flat_id": body.flatId,
     }
     return _tenant_out(tenant_service.create_tenant(db, data))
 
@@ -51,6 +55,7 @@ def update_tenant(tenant_id: str, body: TenantUpdate, db: Session = Depends(get_
         "name": body.name, "phone": body.phone, "property_address": body.propertyAddress,
         "monthly_rent": body.monthlyRent, "room_rate": body.roomRate, "water_rate": body.waterRate,
         "water_divisor": body.waterDivisor, "upi_id": body.upiId, "move_in_date": body.moveInDate,
+        "flat_id": body.flatId,
     }
     return _tenant_out(tenant_service.update_tenant(db, tenant, data))
 
@@ -118,6 +123,46 @@ def delete_document(tenant_id: str, document_id: str, db: Session = Depends(get_
     doc = document_service.get_or_404(db, tenant_id, document_id)
     document_service.delete_document(db, doc)
     return {"ok": True}
+
+
+@router.get("/{tenant_id}/documents/download-all")
+def download_all_documents(tenant_id: str, db: Session = Depends(get_db)):
+    tenant = tenant_service.get_or_404(db, tenant_id)
+    zip_bytes = document_service.build_tenant_zip(db, tenant)
+    safe_name = tenant.name.replace(" ", "_")
+    return Response(
+        content=zip_bytes,
+        media_type="application/zip",
+        headers={"Content-Disposition": f'attachment; filename="{safe_name}-documents.zip"'},
+    )
+
+
+# --- Profile photo ---
+
+@router.post("/{tenant_id}/profile-photo", response_model=TenantOut)
+def upload_profile_photo(tenant_id: str, file: UploadFile = File(...), db: Session = Depends(get_db)):
+    tenant = tenant_service.get_or_404(db, tenant_id)
+    tenant = document_service.save_profile_photo(db, tenant, file)
+    return _tenant_out(tenant)
+
+
+@router.get("/{tenant_id}/profile-photo")
+def get_profile_photo(tenant_id: str, db: Session = Depends(get_db)):
+    tenant = tenant_service.get_or_404(db, tenant_id)
+    path = document_service.profile_photo_absolute_path(tenant)
+    if not path:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404, detail="No profile photo")
+    import mimetypes
+    mime = mimetypes.guess_type(path)[0] or "image/jpeg"
+    return FileResponse(path, media_type=mime)
+
+
+@router.delete("/{tenant_id}/profile-photo", response_model=TenantOut)
+def delete_profile_photo(tenant_id: str, db: Session = Depends(get_db)):
+    tenant = tenant_service.get_or_404(db, tenant_id)
+    tenant = document_service.delete_profile_photo(db, tenant)
+    return _tenant_out(tenant)
 
 
 # --- Invite ---

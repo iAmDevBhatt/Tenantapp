@@ -1,14 +1,15 @@
-import { useEffect, useState } from 'react'
+import { FormEvent, useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { adminClient } from '@/api/adminClient'
 import { invoicesApi } from '@/api/invoices'
 import { tenantsApi } from '@/api/tenants'
 import { settingsApi } from '@/api/settings'
-import { Invoice } from '@/types/invoice'
+import { Invoice, WriteOff } from '@/types/invoice'
 import { Tenant } from '@/types/tenant'
 import { formatINR } from '@/utils/formulas'
 import { fetchAuthedBlob, triggerBlobDownload } from '@/utils/blob'
 import InvoiceDocument from '@/components/invoice/InvoiceDocument'
+import { useLabels } from '@/hooks/useLabels'
 
 export default function InvoiceDetailPage() {
   const { invoiceId } = useParams<{ invoiceId: string }>()
@@ -21,6 +22,7 @@ export default function InvoiceDetailPage() {
   const [downloading, setDownloading] = useState(false)
   const [pdfDownloaded, setPdfDownloaded] = useState(false)
   const [pdfError, setPdfError] = useState<string | null>(null)
+  const { l } = useLabels()
 
   useEffect(() => {
     if (!invoiceId) return
@@ -58,9 +60,9 @@ export default function InvoiceDetailPage() {
       setPdfDownloaded(true)
     } catch (err: any) {
       if (err?.response?.status === 501) {
-        setPdfError('PDF generation isn’t available in this environment yet (missing system libraries). Run the app via Docker to generate PDFs.')
+        setPdfError(l('error.pdfUnavailable', "PDF generation isn't available in this environment yet (missing system libraries). Run the app via Docker to generate PDFs."))
       } else {
-        setPdfError('Could not download the PDF.')
+        setPdfError(l('error.pdfDownload', 'Could not download the PDF.'))
       }
     } finally {
       setDownloading(false)
@@ -73,7 +75,10 @@ export default function InvoiceDetailPage() {
     const due = new Date(invoice.invoiceDate)
     due.setDate(due.getDate() + invoice.dueDays)
     const dueLabel = due.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
-    const message = `Hi ${tenant.name}, your rent invoice for ${monthLabel} is ${formatINR(invoice.totalPayable)}, due by ${dueLabel}.`
+    const amount = parseFloat(invoice.netPayable) < parseFloat(invoice.totalPayable)
+      ? invoice.netPayable
+      : invoice.totalPayable
+    const message = `Hi ${tenant.name}, your rent invoice for ${monthLabel} is ${formatINR(amount)}, due by ${dueLabel}.`
     const phone = tenant.phone.replace(/[^\d+]/g, '').replace(/^\+/, '')
     window.open(`https://wa.me/${phone}?text=${encodeURIComponent(message)}`, '_blank')
   }
@@ -85,26 +90,42 @@ export default function InvoiceDetailPage() {
   }
 
   async function handleDelete() {
-    if (!invoice || !confirm('Delete this invoice? This cannot be undone.')) return
+    if (!invoice || !confirm(l('confirm.deleteInvoice', 'Delete this invoice? This cannot be undone.'))) return
     await invoicesApi.delete(invoice.id)
     navigate(`/tenants/${invoice.tenantId}`)
   }
 
-  if (loading || !invoice || !tenant) return <p className="text-slate-500">Loading…</p>
+  async function handleDeleteWriteOff(writeOffId: string) {
+    if (!invoice || !confirm(l('confirm.undoWriteOff', 'Undo this write-off?'))) return
+    const updated = await invoicesApi.deleteWriteOff(invoice.id, writeOffId)
+    setInvoice(updated)
+  }
+
+  if (loading || !invoice || !tenant) return <p className="text-slate-500">{l('status.loading', 'Loading…')}</p>
+
+  const hasWriteOffs = invoice.writeOffs.length > 0
+  const netLessThanTotal = parseFloat(invoice.netPayable) < parseFloat(invoice.totalPayable)
 
   return (
     <div className="space-y-4">
       <Link to={`/tenants/${tenant.id}`} className="text-sm text-brand-600 hover:underline">&larr; {tenant.name}</Link>
 
       <div className="flex items-center justify-between flex-wrap gap-2">
-        <span className={`text-xs rounded-full px-3 py-1 ${invoice.paid ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'}`}>
-          {invoice.paid ? 'Paid' : 'Unpaid'}
-        </span>
+        <div className="flex items-center gap-2">
+          <span className={`text-xs rounded-full px-3 py-1 ${invoice.paid ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'}`}>
+            {invoice.paid ? l('status.paid', 'Paid') : l('status.unpaid', 'Unpaid')}
+          </span>
+          {netLessThanTotal && (
+            <span className="text-xs rounded-full px-3 py-1 bg-blue-100 text-blue-700">
+              {l('status.partialWriteOff', 'Write-off applied')}
+            </span>
+          )}
+        </div>
         <div className="flex gap-2 flex-wrap">
           <button className="btn-secondary btn-compact" onClick={handleTogglePaid}>
-            Mark {invoice.paid ? 'unpaid' : 'paid'}
+            {invoice.paid ? l('btn.markUnpaid', 'Mark unpaid') : l('btn.markPaid', 'Mark paid')}
           </button>
-          <button className="btn-danger btn-compact" onClick={handleDelete}>Delete</button>
+          <button className="btn-danger btn-compact" onClick={handleDelete}>{l('btn.delete', 'Delete')}</button>
         </div>
       </div>
 
@@ -118,26 +139,139 @@ export default function InvoiceDetailPage() {
         />
       </div>
 
+      {/* Write-offs section */}
+      <div className="max-w-lg mx-auto card p-4 sm:p-6 space-y-4">
+        <div className="flex items-center justify-between">
+          <h2 className="font-semibold">{l('writeoff.section.title', 'Write-offs')}</h2>
+          {netLessThanTotal && (
+            <span className="text-sm">
+              {l('writeoff.netPayable', 'Net payable')}:{' '}
+              <strong className="text-brand-700 dark:text-brand-300">{formatINR(invoice.netPayable)}</strong>
+            </span>
+          )}
+        </div>
+
+        {hasWriteOffs && (
+          <ul className="divide-y divide-slate-200 dark:divide-slate-800">
+            {invoice.writeOffs.map((wo: WriteOff) => (
+              <li key={wo.id} className="py-2 flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="font-medium text-sm">{formatINR(wo.amount)}</p>
+                  <p className="text-xs text-slate-600 dark:text-slate-400">{wo.reason}</p>
+                  <p className="text-xs text-slate-400">
+                    {wo.writtenOffBy && `${wo.writtenOffBy} · `}
+                    {new Date(wo.writtenOffAt).toLocaleDateString('en-IN')}
+                  </p>
+                </div>
+                <button
+                  className="btn-secondary btn-compact flex-shrink-0 text-xs"
+                  onClick={() => handleDeleteWriteOff(wo.id)}
+                >
+                  {l('btn.undo', 'Undo')}
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+
+        {!invoice.paid && (
+          <WriteOffForm
+            invoiceId={invoice.id}
+            netPayable={invoice.netPayable}
+            onAdded={setInvoice}
+            l={l}
+          />
+        )}
+        {invoice.paid && !hasWriteOffs && (
+          <p className="text-xs text-slate-400">{l('writeoff.noWriteOffsOnPaid', 'Mark the invoice as unpaid to add write-offs.')}</p>
+        )}
+      </div>
+
       {pdfError && <div className="rounded-lg bg-red-50 text-red-700 px-3 py-2 text-sm max-w-lg mx-auto">{pdfError}</div>}
 
       <div className="max-w-lg mx-auto flex flex-col sm:flex-row gap-3">
         <button className="btn-primary flex-1" onClick={handleDownloadPdf} disabled={downloading}>
-          {downloading ? 'Preparing…' : 'Download PDF'}
+          {downloading ? l('btn.preparing', 'Preparing…') : l('btn.downloadPdf', 'Download PDF')}
         </button>
         <button
           className="btn-secondary flex-1"
           onClick={handleSendWhatsApp}
           disabled={!tenant.phone}
-          title={!tenant.phone ? 'Add a phone number to this tenant first' : !pdfDownloaded ? 'Tip: download the PDF first, then attach it in the opened chat' : undefined}
+          title={!tenant.phone ? l('tooltip.noPhone', 'Add a phone number to this tenant first') : !pdfDownloaded ? l('tooltip.whatsappTip', 'Tip: download the PDF first, then attach it in the opened chat') : undefined}
         >
-          Send via WhatsApp
+          {l('btn.sendWhatsApp', 'Send via WhatsApp')}
         </button>
       </div>
       {!pdfDownloaded && tenant.phone && (
         <p className="max-w-lg mx-auto text-xs text-slate-500 text-center">
-          WhatsApp links can’t attach files automatically: download the PDF first, tap Send via WhatsApp, then attach the PDF in the chat that opens.
+          {l('info.whatsappAttach', "WhatsApp links can't attach files automatically: download the PDF first, tap Send via WhatsApp, then attach the PDF in the chat that opens.")}
         </p>
       )}
     </div>
+  )
+}
+
+interface WriteOffFormProps {
+  invoiceId: string
+  netPayable: string
+  onAdded: (inv: Invoice) => void
+  l: (key: string, fallback: string) => string
+}
+
+function WriteOffForm({ invoiceId, netPayable, onAdded, l }: WriteOffFormProps) {
+  const [amount, setAmount] = useState('')
+  const [reason, setReason] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const net = parseFloat(netPayable) || 0
+
+  async function handleSubmit(e: FormEvent) {
+    e.preventDefault()
+    const amt = parseFloat(amount)
+    if (!amt || amt <= 0 || amt > net) {
+      setError(l('writeoff.validation.exceedsNet', `Amount must be between 0.01 and ${netPayable}`).replace(netPayable, formatINR(netPayable)))
+      return
+    }
+    setSaving(true)
+    setError(null)
+    try {
+      const updated = await invoicesApi.addWriteOff(invoiceId, { amount, reason })
+      onAdded(updated)
+      setAmount('')
+      setReason('')
+    } catch (err: any) {
+      setError(err?.response?.data?.detail || l('error.generic', 'Something went wrong'))
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-3 pt-2 border-t border-slate-200 dark:border-slate-800">
+      <p className="text-xs font-medium text-slate-500">{l('writeoff.addTitle', 'Add write-off')}</p>
+      {error && <div className="rounded-lg bg-red-50 text-red-700 px-3 py-2 text-sm">{error}</div>}
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <label className="field-label">{l('writeoff.label.amount', 'Amount (₹)')}</label>
+          <input
+            className="field-input" type="number" step="0.01" min="0.01" max={net}
+            placeholder="0.00" required value={amount}
+            onChange={(e) => setAmount(e.target.value)}
+          />
+        </div>
+        <div>
+          <label className="field-label">{l('writeoff.label.reason', 'Reason')}</label>
+          <input
+            className="field-input" required
+            placeholder={l('writeoff.placeholder.reason', 'e.g. Goodwill, repair deduction')}
+            value={reason} onChange={(e) => setReason(e.target.value)}
+          />
+        </div>
+      </div>
+      <button type="submit" className="btn-primary btn-compact" disabled={saving}>
+        {saving ? l('btn.saving', 'Saving…') : l('writeoff.btn.add', 'Write off amount')}
+      </button>
+    </form>
   )
 }

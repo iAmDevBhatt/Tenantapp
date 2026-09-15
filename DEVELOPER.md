@@ -36,58 +36,93 @@ See `README.md` → Quick start / Local development, or `AI_SETUP.md` for a lite
 ```
 backend/
 ├── main.py              FastAPI app, CORS, router registration, SERVE_STATIC mount
-├── database.py           engine + SessionLocal + Base + get_db
-├── migrate.py             guarded ALTER TABLE steps (no Alembic) — run every boot
-├── seed.py                 admin account + settings row (idempotent) — run every boot
+├── database.py          engine + SessionLocal + Base + get_db
+├── migrate.py           guarded ALTER TABLE steps (no Alembic) — run every boot
+├── seed.py              admin account + settings row (idempotent) — run every boot
 ├── core/
-│   ├── config.py            pydantic-settings Settings, every env var
-│   ├── security.py           bcrypt hashing (NOT passlib) + JWT encode/decode
-│   └── deps.py                get_current_admin / get_current_tenant
-├── models/                  SQLAlchemy ORM — one file per table
-├── schemas/                  Pydantic request/response models
-├── routers/                   thin FastAPI handlers (auth, portal_auth, settings, aggregate,
-│                                tenants, invoices, portal, catchall_router)
-├── services/                   business logic — invoice_service.py has the billing formula
-├── templates/invoice.html       Jinja2 template for the PDF (KEEP IN SYNC WITH the frontend
-│                                 InvoiceDocument component — see its header comment)
-├── mcp/server.py                stub MCP tool-callable seam
-└── tests/                        pytest — conftest.py spins up a throwaway sqlite file per run
+│   ├── config.py        pydantic-settings Settings, every env var
+│   ├── security.py      bcrypt hashing (NOT passlib) + JWT encode/decode
+│   └── deps.py          get_current_admin / get_current_tenant
+├── models/              SQLAlchemy ORM — one file per table
+│   ├── tenant.py          + profile_photo_path (TEXT), flat_id (FK → property_flats)
+│   ├── invoice.py         + writeoffs relationship
+│   ├── invoice_writeoff.py  write-off child table
+│   ├── property.py          Property + PropertyFlat models
+│   └── ...
+├── schemas/             Pydantic request/response models
+│   ├── tenant.py          TenantOut includes hasProfilePhoto, flatId
+│   ├── invoice.py         InvoiceOut includes writeOffs[], netPayable
+│   ├── invoice_writeoff.py  WriteOffCreate, WriteOffOut
+│   └── property.py        PropertyOut, FlatOut, create/update variants
+├── routers/             thin FastAPI handlers
+│   ├── tenants.py         + profile-photo CRUD, download-all (zip)
+│   ├── invoices.py        + write-off CRUD
+│   ├── properties.py      full CRUD for properties + flats
+│   └── ...
+├── services/            business logic
+│   ├── invoice_service.py   billing formula + net_payable() + write-off helpers
+│   │                         next_invoice_defaults uses net balance for previous dues
+│   ├── document_service.py  + save_profile_photo, delete_profile_photo, build_tenant_zip
+│   ├── property_service.py  list/create/update/delete properties and flats
+│   └── ...
+├── templates/invoice.html   Jinja2 template for the PDF
+└── tests/               pytest — conftest.py spins up a throwaway sqlite file per run
 ```
 
 ## Frontend File Map
 
 ```
 frontend/src/
-├── api/            axios modules — adminClient/portalClient are separate instances with
-│                    separate localStorage token keys so an admin tab and a tenant-portal
-│                    tab coexist in one browser
-├── store/AuthContext.tsx   both roles' auth state
-├── hooks/                    useAuth (role-specific wrappers), useLabels (stub)
+├── api/
+│   ├── adminClient.ts / portalClient.ts   separate axios instances, separate localStorage keys
+│   ├── tenants.ts       + uploadProfilePhoto, deleteProfilePhoto, profilePhotoUrl,
+│   │                      downloadAllDocsUrl
+│   ├── invoices.ts      + addWriteOff, deleteWriteOff
+│   └── properties.ts    full CRUD for properties + flats
+├── types/
+│   ├── tenant.ts        + hasProfilePhoto: boolean, flatId: string | null
+│   ├── invoice.ts       + WriteOff, WriteOffCreateInput, writeOffs[], netPayable
+│   └── property.ts      Property, PropertyFlat, create/input interfaces
+├── hooks/
+│   ├── useLabels.ts     loads /labels.properties once (module-level cache); l(key, fallback)
+│   └── useAuth.ts
 ├── utils/
-│   ├── formulas.ts            client-side LIVE PREVIEW mirror of the backend formula —
-│   │                           never the source of truth; the server response after save is
-│   ├── blob.ts                  fetchAuthedBlob() — PDFs/QR/documents need an Authorization
-│                                  header, so plain <img src>/<a href> can't fetch them directly
-├── types/                    tenant.ts, invoice.ts, auth.ts, settings.ts
+│   ├── formulas.ts      client-side live-preview mirror of the billing formula
+│   └── blob.ts          fetchAuthedBlob() + triggerBlobDownload() — used for images, PDFs, zips
 ├── components/
-│   ├── layout/                AdminLayout.tsx, PortalLayout.tsx
-│   ├── TenantForm.tsx, DocumentList.tsx, InviteCodeCard.tsx
-│   └── invoice/InvoiceDocument.tsx + invoice-print.css   on-screen invoice view — KEEP IN
-│                                                            SYNC WITH backend/templates/invoice.html
-└── pages/admin/*, pages/portal/*
+│   ├── TenantAvatar.tsx   circular avatar; fetches blob, shows initials fallback; sizes sm/md/lg
+│   ├── TenantForm.tsx     + Property→Flat dropdowns that auto-fill propertyAddress
+│   ├── PropertiesManager.tsx  full CRUD UI embedded in Settings page
+│   ├── DocumentList.tsx
+│   └── invoice/InvoiceDocument.tsx + invoice-print.css
+└── pages/
+    ├── admin/DashboardPage.tsx      tenant cards include TenantAvatar
+    ├── admin/TenantDetailPage.tsx   + profile photo upload/delete, download-all zip button
+    ├── admin/InvoiceDetailPage.tsx  + write-offs section + WriteOffForm
+    └── admin/SettingsPage.tsx       + PropertiesManager section
 ```
+
+## UI String Externalisation
+
+All user-visible strings live in `frontend/public/labels.properties` (Java `.properties` format). The `useLabels()` hook lazy-loads this file once and exposes `l(key, fallback)`. **Every component and page must use `l(...)` — never inline string literals in JSX.** When adding a feature, append the new keys to `labels.properties` first, then reference them in code.
 
 ## Troubleshooting
 
-**"I can't log in as admin/admin123"** — there is no default password. `start.ps1` generates a random admin password on its first run (printed to the console once) and saves it in `.env` (`ADMIN_PASSWORD=`) at the repo root — that's the only place it exists afterward (the terminal output scrolls away). If you've lost it: `ADMIN_USERNAME`/`ADMIN_PASSWORD` in `.env` only take effect via `seed.py` when `admin_users` is empty, so editing `.env` after the first run does nothing. To reset in dev, stop the app (`.\stop.ps1`), delete `data/app.db*` and `.env`, then `.\start.ps1` again for a fresh admin login. In Docker, the same rule applies — `ADMIN_USERNAME`/`ADMIN_PASSWORD` in your deployed `.env` only seed the *first* admin account; change the password afterward via Settings → Change Password, not by editing `.env`.
+**"I can't log in as admin/admin123"** — there is no default password. `start.ps1` generates a random admin password on its first run (printed to the console once) and saves it in `.env` (`ADMIN_PASSWORD=`) at the repo root — that's the only place it exists afterward. If you've lost it: `ADMIN_USERNAME`/`ADMIN_PASSWORD` in `.env` only take effect via `seed.py` when `admin_users` is empty. To reset in dev: stop the app (`.\stop.ps1`), delete `data/app.db*` and `.env`, then `.\start.ps1` again for a fresh admin login.
+
+**"table tenants has no column named profile_photo_path"** — the DB existed before the new columns were added. Stop the app, then run `python -m backend.migrate` (or just restart via `start.ps1` — the migration runs automatically on boot).
 
 ## How To (common tasks)
 
-**Add a new tenant field**: add the column to `models/tenant.py` + a guarded `_add_column_if_missing` step in `migrate.py` + the field in `schemas/tenant.py` (all three of `TenantBase`/`TenantUpdate`/`TenantOut`) + wire it through `routers/tenants.py`'s `_tenant_out`/create/update + `frontend/src/types/tenant.ts` + `TenantForm.tsx`.
+**Add a new tenant field**: add the column to `models/tenant.py` + a guarded `_add_column_if_missing` step in `migrate.py` + the field in `schemas/tenant.py` + wire it through `routers/tenants.py`'s `_tenant_out`/create/update + `frontend/src/types/tenant.ts` + `TenantForm.tsx`.
 
-**Change the invoice PDF layout**: edit `backend/templates/invoice.html` AND `frontend/src/components/invoice/InvoiceDocument.tsx` + `invoice-print.css` together — they're two independent render paths for the same design (server HTML→PDF vs. on-screen React), not one shared template, so nothing enforces they stay in sync except discipline. Check both against a real invoice after any change.
+**Add a new property or flat field**: edit `models/property.py` + `schemas/property.py` + `services/property_service.py` + `routers/properties.py` + `frontend/src/types/property.ts` + `api/properties.ts` + `PropertiesManager.tsx`.
 
-**Add an admin-only endpoint**: create the router file (or add to an existing one) with `dependencies=[Depends(get_current_admin)]` at the `APIRouter(...)` level (see `routers/tenants.py`); register it in `main.py` before `catchall_router`.
+**Add a new invoice write-off field**: edit `models/invoice_writeoff.py` + `schemas/invoice_writeoff.py` + `services/invoice_service.py` + `routers/invoices.py` + `frontend/src/types/invoice.ts` + `InvoiceDetailPage.tsx`.
+
+**Change the invoice PDF layout**: edit `backend/templates/invoice.html` AND `frontend/src/components/invoice/InvoiceDocument.tsx` + `invoice-print.css` together — they're two independent render paths for the same design (server HTML→PDF vs. on-screen React), not one shared template. Check both against a real invoice after any change.
+
+**Add an admin-only endpoint**: create the router file (or add to an existing one) with `dependencies=[Depends(get_current_admin)]` at the `APIRouter(...)` level; register it in `main.py` before `catchall_router`.
 
 **Run only the formula tests**: `pytest backend/tests/test_invoice_calculations.py -v`.
 
@@ -95,7 +130,7 @@ frontend/src/
 
 See README's Quick Start. Key facts: two-stage build (`node:20-alpine` → `python:3.12-slim`), WeasyPrint's apt packages installed in the runtime stage, two named volumes (`app_data`, `uploads_data`), `docker-entrypoint.sh` runs migrate → seed → `exec uvicorn` on every boot (idempotent, safe to restart anytime). `JWT_SECRET`/`ADMIN_USERNAME`/`ADMIN_PASSWORD` have no committed fallback — compose refuses to start without them (`${VAR:?must be set}`).
 
-**Local build note**: this repo's Dockerfile/entrypoint were written and the SERVE_STATIC single-container mode was verified by running the built backend directly against a built `frontend/dist` copy outside Docker (Docker itself wasn't available in the environment this was built in) — the actual `docker build`/`docker compose up` has not been run. Do that once before relying on it in production.
+**Local build note**: this repo's Dockerfile/entrypoint were written and the SERVE_STATIC single-container mode was verified by running the built backend directly against a built `frontend/dist` copy outside Docker — the actual `docker build`/`docker compose up` has not been run end-to-end. Do that once before relying on it in production.
 
 ## PWA
 

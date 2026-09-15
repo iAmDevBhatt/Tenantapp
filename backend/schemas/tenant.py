@@ -17,7 +17,7 @@ class TenantBase(BaseModel):
 
 
 class TenantCreate(TenantBase):
-    pass
+    flatId: str | None = None
 
 
 class TenantUpdate(BaseModel):
@@ -30,6 +30,7 @@ class TenantUpdate(BaseModel):
     waterDivisor: int | None = Field(default=None, ge=1)
     upiId: str | None = None
     moveInDate: date | None = None
+    flatId: str | None = None
 
 
 class DeactivateRequest(BaseModel):
@@ -50,6 +51,8 @@ class TenantOut(BaseModel):
     moveInDate: date
     moveOutDate: date | None
     hasPortalAccount: bool = False
+    hasProfilePhoto: bool = False
+    flatId: str | None = None
     createdAt: datetime
 
     model_config = {"from_attributes": True}

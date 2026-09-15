@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import Column, String, Text, Numeric, Integer, Boolean, Date, DateTime
+from sqlalchemy import Column, String, Text, Numeric, Integer, Boolean, Date, DateTime, ForeignKey
 from sqlalchemy.orm import relationship
 
 from backend.database import Base
@@ -22,6 +22,8 @@ class Tenant(Base):
     active = Column(Boolean, nullable=False, default=True)
     move_in_date = Column(Date, nullable=False)
     move_out_date = Column(Date, nullable=True)
+    profile_photo_path = Column(String, nullable=True)
+    flat_id = Column(String(36), ForeignKey("property_flats.id"), nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -35,3 +37,4 @@ class Tenant(Base):
     tenant_user = relationship(
         "TenantUser", uselist=False, cascade="all, delete-orphan", back_populates="tenant"
     )
+    flat = relationship("PropertyFlat", back_populates="tenants")

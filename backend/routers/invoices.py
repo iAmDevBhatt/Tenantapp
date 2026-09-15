@@ -1,18 +1,28 @@
-from fastapi import APIRouter, Depends
+from decimal import Decimal
+
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import Response
 from sqlalchemy.orm import Session
 
 from backend.core.deps import get_current_admin
 from backend.database import get_db
+from backend.models.admin_user import AdminUser
 from backend.schemas.invoice import InvoiceCreate, InvoiceUpdate, InvoiceOut, TogglePaidRequest
+from backend.schemas.invoice_writeoff import WriteOffCreate, WriteOffOut
 from backend.services import invoice_service, tenant_service, settings_service, qr_service
 from backend.services.pdf_service import render_invoice_pdf, PdfUnavailableError, build_invoice_view
-from fastapi import HTTPException
 
 router = APIRouter(prefix="/api/invoices", tags=["invoices"], dependencies=[Depends(get_current_admin)])
 
 
 def _out(inv) -> InvoiceOut:
+    write_offs = [
+        WriteOffOut(
+            id=wo.id, invoiceId=wo.invoice_id, amount=wo.amount,
+            reason=wo.reason, writtenOffBy=wo.written_off_by, writtenOffAt=wo.written_off_at,
+        )
+        for wo in inv.writeoffs
+    ]
     return InvoiceOut(
         id=inv.id, tenantId=inv.tenant_id, invoiceDate=inv.invoice_date,
         roomStart=inv.room_start, roomEnd=inv.room_end, waterStart=inv.water_start,
@@ -22,6 +32,8 @@ def _out(inv) -> InvoiceOut:
         roomUsage=inv.room_usage, waterUsage=inv.water_usage, roomAmount=inv.room_amount,
         waterAmount=inv.water_amount, totalPayable=inv.total_payable,
         paid=inv.paid, paidDate=inv.paid_date, createdAt=inv.created_at,
+        writeOffs=write_offs,
+        netPayable=invoice_service.net_payable(inv),
     )
 
 
@@ -95,3 +107,25 @@ def get_invoice_qr(invoice_id: str, db: Session = Depends(get_db)):
     ctx = build_invoice_view(inv, inv.tenant, settings_service.get_or_create(db))
     png_bytes = qr_service.generate_qr_png_bytes(ctx["qr_uri"])
     return Response(content=png_bytes, media_type="image/png")
+
+
+@router.post("/{invoice_id}/writeoffs", response_model=InvoiceOut)
+def add_writeoff(
+    invoice_id: str,
+    body: WriteOffCreate,
+    db: Session = Depends(get_db),
+    current_admin: AdminUser = Depends(get_current_admin),
+):
+    inv = invoice_service.get_or_404(db, invoice_id)
+    net = invoice_service.net_payable(inv)
+    if body.amount <= Decimal("0") or body.amount > net:
+        raise HTTPException(status_code=422, detail=f"Amount must be between 0.01 and {net}")
+    inv = invoice_service.create_writeoff(db, inv, body.amount, body.reason, current_admin.username)
+    return _out(inv)
+
+
+@router.delete("/{invoice_id}/writeoffs/{writeoff_id}", response_model=InvoiceOut)
+def delete_writeoff(invoice_id: str, writeoff_id: str, db: Session = Depends(get_db)):
+    inv = invoice_service.get_or_404(db, invoice_id)
+    inv = invoice_service.delete_writeoff(db, inv, writeoff_id)
+    return _out(inv)

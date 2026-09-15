@@ -41,7 +41,12 @@ if (-not (Get-Command npm -ErrorAction SilentlyContinue)) {
 if (-not (Test-Path "$root\frontend\node_modules")) {
     Write-Host "Installing frontend dependencies (npm install)..."
     Push-Location "$root\frontend"
+    # Corporate SSL proxy: temporarily disable strict-ssl so npm can fetch packages,
+    # then restore it immediately after. Does not affect non-npm tools.
+    $strictSslWas = npm config get strict-ssl
+    npm config set strict-ssl false
     npm install
+    npm config set strict-ssl $strictSslWas
     Pop-Location
 }
 

@@ -3,9 +3,9 @@ import tempfile
 
 # Required env vars must be set BEFORE backend.core.config is imported by
 # anything (it reads them once, at module import time via pydantic-settings).
-os.environ.setdefault("JWT_SECRET", "test-secret-for-pytest-only")
-os.environ.setdefault("ADMIN_USERNAME", "admin")
-os.environ.setdefault("ADMIN_PASSWORD", "admin-test-pass")
+os.environ["JWT_SECRET"] = "test-secret-for-pytest-only"
+os.environ["ADMIN_USERNAME"] = "admin"
+os.environ["ADMIN_PASSWORD"] = "admin-test-pass"
 
 _tmp_dir = tempfile.mkdtemp(prefix="rentledger-test-")
 os.environ["DATABASE_URL"] = f"sqlite:///{_tmp_dir}/test.db"

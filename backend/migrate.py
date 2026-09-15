@@ -33,15 +33,13 @@ def run_migrations() -> None:
     if not db_path:
         return  # non-sqlite backends: rely on create_all only for now
 
-    import os
-    if not os.path.exists(db_path):
-        return  # brand-new DB, create_all above already built the current schema
-
     conn = sqlite3.connect(db_path)
     try:
         cur = conn.cursor()
-        # Example of the guarded-ALTER pattern for future schema changes:
-        # _add_column_if_missing(cur, "tenants", "notes", "TEXT")
+        # R1: tenant passport photo
+        _add_column_if_missing(cur, "tenants", "profile_photo_path", "TEXT")
+        # R2: flat association (Property → Flat → Tenant)
+        _add_column_if_missing(cur, "tenants", "flat_id", "TEXT")
         conn.commit()
     finally:
         conn.close()

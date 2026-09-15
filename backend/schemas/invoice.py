@@ -3,6 +3,8 @@ from decimal import Decimal
 
 from pydantic import BaseModel
 
+from backend.schemas.invoice_writeoff import WriteOffOut
+
 # NOTE: rates, divisor, rent, usage and amount fields are intentionally absent
 # from the input schemas below. Pydantic drops anything a client sends that
 # isn't declared here, so a forged `totalPayable` (etc.) in a request body is
@@ -62,5 +64,7 @@ class InvoiceOut(BaseModel):
     paid: bool
     paidDate: date | None
     createdAt: datetime
+    writeOffs: list[WriteOffOut] = []
+    netPayable: Decimal = Decimal("0")
 
     model_config = {"from_attributes": True}

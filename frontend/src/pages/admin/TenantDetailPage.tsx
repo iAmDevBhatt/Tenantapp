@@ -1,13 +1,17 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
+import { adminClient } from '@/api/adminClient'
 import { tenantsApi } from '@/api/tenants'
 import { invoicesApi } from '@/api/invoices'
 import { Tenant } from '@/types/tenant'
 import { Invoice } from '@/types/invoice'
 import { formatINR } from '@/utils/formulas'
+import { fetchAuthedBlob, triggerBlobDownload } from '@/utils/blob'
 import TenantForm from '@/components/TenantForm'
+import TenantAvatar from '@/components/TenantAvatar'
 import DocumentList from '@/components/DocumentList'
 import InviteCodeCard from '@/components/InviteCodeCard'
+import { useLabels } from '@/hooks/useLabels'
 
 type Tab = 'profile' | 'documents' | 'invoices' | 'invite'
 
@@ -19,6 +23,15 @@ export default function TenantDetailPage() {
   const [tab, setTab] = useState<Tab>('profile')
   const [editing, setEditing] = useState(false)
   const [loading, setLoading] = useState(true)
+  const [downloadingAll, setDownloadingAll] = useState(false)
+  const { l } = useLabels()
+
+  const TAB_LABELS: Record<Tab, string> = {
+    profile: l('tab.profile', 'Profile'),
+    documents: l('tab.documents', 'Documents'),
+    invoices: l('tab.invoices', 'Invoices'),
+    invite: l('tab.invite', 'Invite'),
+  }
 
   async function load() {
     if (!tenantId) return
@@ -45,7 +58,7 @@ export default function TenantDetailPage() {
   }
 
   async function handleDeactivate() {
-    if (!tenantId || !confirm('Mark this tenant as moved out? Their invoice history is kept.')) return
+    if (!tenantId || !confirm(l('confirm.deactivate', 'Mark this tenant as moved out? Their invoice history is kept.'))) return
     setTenant(await tenantsApi.deactivate(tenantId))
   }
 
@@ -54,28 +67,58 @@ export default function TenantDetailPage() {
     setTenant(await tenantsApi.reactivate(tenantId))
   }
 
-  if (loading || !tenant) return <p className="text-slate-500">Loading…</p>
+  async function handleProfilePhotoUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file || !tenantId) return
+    const updated = await tenantsApi.uploadProfilePhoto(tenantId, file)
+    setTenant(updated)
+  }
+
+  async function handleDeleteProfilePhoto() {
+    if (!tenantId) return
+    const updated = await tenantsApi.deleteProfilePhoto(tenantId)
+    setTenant(updated)
+  }
+
+  async function handleDownloadAll() {
+    if (!tenant) return
+    setDownloadingAll(true)
+    try {
+      const url = await fetchAuthedBlob(adminClient, tenantsApi.downloadAllDocsUrl(tenant.id))
+      triggerBlobDownload(url, `${tenant.name.replace(/\s+/g, '_')}-documents.zip`)
+      URL.revokeObjectURL(url)
+    } finally {
+      setDownloadingAll(false)
+    }
+  }
+
+  if (loading || !tenant) return <p className="text-slate-500">{l('status.loading', 'Loading…')}</p>
 
   return (
     <div className="space-y-4">
-      <Link to="/" className="text-sm text-brand-600 hover:underline">&larr; All tenants</Link>
+      <Link to="/" className="text-sm text-brand-600 hover:underline">{l('nav.allTenants', '← All tenants')}</Link>
 
       <div className="flex items-start justify-between flex-wrap gap-3">
-        <div>
-          <h1 className="text-xl font-bold flex items-center gap-2">
-            {tenant.name}
-            {!tenant.active && (
-              <span className="text-xs bg-slate-200 dark:bg-slate-700 rounded-full px-2 py-0.5">Moved out</span>
-            )}
-          </h1>
-          <p className="text-slate-500 text-sm">{tenant.propertyAddress}</p>
+        <div className="flex items-center gap-4">
+          <TenantAvatar tenantId={tenant.id} hasProfilePhoto={tenant.hasProfilePhoto} name={tenant.name} size="lg" />
+          <div>
+            <h1 className="text-xl font-bold flex items-center gap-2">
+              {tenant.name}
+              {!tenant.active && (
+                <span className="text-xs bg-slate-200 dark:bg-slate-700 rounded-full px-2 py-0.5">
+                  {l('status.movedOut', 'Moved out')}
+                </span>
+              )}
+            </h1>
+            <p className="text-slate-500 text-sm">{tenant.propertyAddress}</p>
+          </div>
         </div>
         <div className="flex gap-2 flex-wrap">
-          <Link to={`/tenants/${tenant.id}/new-invoice`} className="btn-primary">+ New invoice</Link>
+          <Link to={`/tenants/${tenant.id}/new-invoice`} className="btn-primary">{l('btn.newInvoice', '+ New invoice')}</Link>
           {tenant.active ? (
-            <button className="btn-secondary" onClick={handleDeactivate}>Mark moved out</button>
+            <button className="btn-secondary" onClick={handleDeactivate}>{l('btn.markMovedOut', 'Mark moved out')}</button>
           ) : (
-            <button className="btn-secondary" onClick={handleReactivate}>Reactivate</button>
+            <button className="btn-secondary" onClick={handleReactivate}>{l('btn.reactivate', 'Reactivate')}</button>
           )}
         </div>
       </div>
@@ -87,7 +130,7 @@ export default function TenantDetailPage() {
             className={`btn-compact rounded-none border-b-2 ${tab === t ? 'border-brand-600 text-brand-700 dark:text-brand-300' : 'border-transparent text-slate-500'}`}
             onClick={() => setTab(t)}
           >
-            {t[0].toUpperCase() + t.slice(1)}
+            {TAB_LABELS[t]}
           </button>
         ))}
       </div>
@@ -97,30 +140,49 @@ export default function TenantDetailPage() {
           {editing ? (
             <TenantForm
               initial={tenant}
-              submitLabel="Save changes"
+              submitLabel={l('btn.saveChanges', 'Save changes')}
               onSubmit={handleUpdate}
               onCancel={() => setEditing(false)}
             />
           ) : (
-            <div className="space-y-3">
+            <div className="space-y-4">
+              <div className="flex items-center gap-4">
+                <TenantAvatar tenantId={tenant.id} hasProfilePhoto={tenant.hasProfilePhoto} name={tenant.name} size="lg" />
+                <div className="flex gap-2 flex-wrap">
+                  <label className="btn-secondary btn-compact cursor-pointer">
+                    {tenant.hasProfilePhoto ? l('btn.replacePhoto', 'Replace photo') : l('btn.uploadPhoto', 'Upload photo')}
+                    <input type="file" accept="image/*" className="hidden" onChange={handleProfilePhotoUpload} />
+                  </label>
+                  {tenant.hasProfilePhoto && (
+                    <button className="btn-danger btn-compact" onClick={handleDeleteProfilePhoto}>
+                      {l('btn.remove', 'Remove')}
+                    </button>
+                  )}
+                </div>
+              </div>
               <dl className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
-                <Field label="Phone" value={tenant.phone || '—'} />
-                <Field label="Monthly Rent" value={formatINR(tenant.monthlyRent)} />
-                <Field label="Room Rate" value={`${formatINR(tenant.roomRate)}/unit`} />
-                <Field label="Water Rate" value={`${formatINR(tenant.waterRate)}/unit`} />
-                <Field label="Water Shared By" value={String(tenant.waterDivisor)} />
-                <Field label="UPI ID" value={tenant.upiId || '—'} />
-                <Field label="Move-in Date" value={tenant.moveInDate} />
-                {tenant.moveOutDate && <Field label="Move-out Date" value={tenant.moveOutDate} />}
+                <Field label={l('field.phone', 'Phone')} value={tenant.phone || '—'} />
+                <Field label={l('field.monthlyRent', 'Monthly Rent')} value={formatINR(tenant.monthlyRent)} />
+                <Field label={l('field.roomRate', 'Room Rate')} value={`${formatINR(tenant.roomRate)}/unit`} />
+                <Field label={l('field.waterRate', 'Water Rate')} value={`${formatINR(tenant.waterRate)}/unit`} />
+                <Field label={l('field.waterSharedBy', 'Water Shared By')} value={String(tenant.waterDivisor)} />
+                <Field label={l('field.upiId', 'UPI ID')} value={tenant.upiId || '—'} />
+                <Field label={l('field.moveInDate', 'Move-in Date')} value={tenant.moveInDate} />
+                {tenant.moveOutDate && <Field label={l('field.moveOutDate', 'Move-out Date')} value={tenant.moveOutDate} />}
               </dl>
-              <button className="btn-secondary" onClick={() => setEditing(true)}>Edit details</button>
+              <button className="btn-secondary" onClick={() => setEditing(true)}>{l('btn.editDetails', 'Edit details')}</button>
             </div>
           )}
         </div>
       )}
 
       {tab === 'documents' && (
-        <div className="card p-4 sm:p-6">
+        <div className="card p-4 sm:p-6 space-y-3">
+          <div className="flex justify-end">
+            <button className="btn-secondary btn-compact" onClick={handleDownloadAll} disabled={downloadingAll}>
+              {downloadingAll ? l('btn.preparing', 'Preparing…') : l('btn.downloadAll', 'Download all (zip)')}
+            </button>
+          </div>
           <DocumentList tenantId={tenant.id} />
         </div>
       )}
@@ -128,7 +190,7 @@ export default function TenantDetailPage() {
       {tab === 'invoices' && (
         <div className="card divide-y divide-slate-200 dark:divide-slate-800">
           {invoices.length === 0 ? (
-            <p className="p-4 text-sm text-slate-500">No invoices yet.</p>
+            <p className="p-4 text-sm text-slate-500">{l('invoice.empty', 'No invoices yet.')}</p>
           ) : (
             invoices.map((inv) => (
               <button
@@ -141,7 +203,7 @@ export default function TenantDetailPage() {
                   <p className="text-sm text-slate-500">{formatINR(inv.totalPayable)}</p>
                 </div>
                 <span className={`text-xs rounded-full px-2 py-0.5 ${inv.paid ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'}`}>
-                  {inv.paid ? 'Paid' : 'Unpaid'}
+                  {inv.paid ? l('status.paid', 'Paid') : l('status.unpaid', 'Unpaid')}
                 </span>
               </button>
             ))

@@ -12,6 +12,8 @@ export interface Tenant {
   moveInDate: string
   moveOutDate: string | null
   hasPortalAccount: boolean
+  hasProfilePhoto: boolean
+  flatId: string | null
   createdAt: string
 }
 
@@ -25,6 +27,7 @@ export interface TenantInput {
   waterDivisor: number
   upiId: string | null
   moveInDate: string
+  flatId?: string | null
 }
 
 export interface NextInvoiceDefaults {
