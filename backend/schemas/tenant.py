@@ -14,6 +14,9 @@ class TenantBase(BaseModel):
     waterDivisor: int = Field(default=1, ge=1)
     upiId: str | None = None
     moveInDate: date
+    permanentAddress: str | None = None
+    emergencyContactName: str | None = None
+    emergencyContactPhone: str | None = None
 
 
 class TenantCreate(TenantBase):
@@ -31,6 +34,9 @@ class TenantUpdate(BaseModel):
     upiId: str | None = None
     moveInDate: date | None = None
     flatId: str | None = None
+    permanentAddress: str | None = None
+    emergencyContactName: str | None = None
+    emergencyContactPhone: str | None = None
 
 
 class DeactivateRequest(BaseModel):
@@ -53,6 +59,9 @@ class TenantOut(BaseModel):
     hasPortalAccount: bool = False
     hasProfilePhoto: bool = False
     flatId: str | None = None
+    permanentAddress: str | None = None
+    emergencyContactName: str | None = None
+    emergencyContactPhone: str | None = None
     createdAt: datetime
 
     model_config = {"from_attributes": True}

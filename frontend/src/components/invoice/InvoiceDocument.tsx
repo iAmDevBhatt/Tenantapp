@@ -47,8 +47,8 @@ export default function InvoiceDocument({ invoice, tenantName, tenantAddress, qr
           <thead>
             <tr>
               <th>{l('invoice.table.header.description', 'Description')}</th>
-              <th className="inv-num">{l('invoice.table.header.start', 'Start')}</th>
-              <th className="inv-num">{l('invoice.table.header.end', 'End')}</th>
+              <th className="inv-num">{l('invoice.table.header.start', 'Opening Reading')}</th>
+              <th className="inv-num">{l('invoice.table.header.end', 'Closing Reading')}</th>
               <th className="inv-num">{l('invoice.table.header.usage', 'Usage')}</th>
               <th className="inv-num">{l('invoice.table.header.rate', 'Rate')}</th>
               <th className="inv-num">{l('invoice.table.header.amount', 'Amount')}</th>
@@ -57,17 +57,17 @@ export default function InvoiceDocument({ invoice, tenantName, tenantAddress, qr
           <tbody>
             <tr>
               <td className="inv-desc">{l('invoice.row.roomMeter', 'Room Meter (A)')}</td>
-              <td className="inv-num">{invoice.roomStart}</td>
-              <td className="inv-num">{invoice.roomEnd}</td>
-              <td className="inv-num">{invoice.roomUsage}</td>
+              <td className="inv-num">{Math.floor(parseFloat(invoice.roomStart))}</td>
+              <td className="inv-num">{Math.floor(parseFloat(invoice.roomEnd))}</td>
+              <td className="inv-num">{Math.floor(parseFloat(invoice.roomUsage))}</td>
               <td className="inv-num">{formatINR(invoice.roomRate)}</td>
               <td className="inv-num">{formatINR(invoice.roomAmount)}</td>
             </tr>
             <tr>
               <td className="inv-desc">{l('invoice.row.waterMeter', 'Water Meter (B)')}</td>
-              <td className="inv-num">{invoice.waterStart}</td>
-              <td className="inv-num">{invoice.waterEnd}</td>
-              <td className="inv-num">{invoice.waterUsage}</td>
+              <td className="inv-num">{Math.floor(parseFloat(invoice.waterStart))}</td>
+              <td className="inv-num">{Math.floor(parseFloat(invoice.waterEnd))}</td>
+              <td className="inv-num">{Math.floor(parseFloat(invoice.waterUsage))}</td>
               <td className="inv-num">{formatINR(invoice.waterRate)}</td>
               <td className="inv-num">{formatINR(invoice.waterAmount)}</td>
             </tr>

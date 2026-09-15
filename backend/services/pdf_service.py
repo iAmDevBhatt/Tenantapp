@@ -72,12 +72,20 @@ def render_invoice_pdf(invoice: Invoice, tenant: Tenant, app_settings: AppSettin
         abs_path = os.path.join(settings.UPLOADS_DIR, app_settings.property_photo_path)
         property_photo_data_uri = _read_data_uri(abs_path)
 
+    meter_photo_data_uris = []
+    for doc in invoice.meter_photos:
+        abs_path = os.path.join(settings.UPLOADS_DIR, doc.file_path)
+        uri = _read_data_uri(abs_path)
+        if uri:
+            meter_photo_data_uris.append(uri)
+
     html_str = _jinja_env.get_template("invoice.html").render(
         invoice=invoice,
         tenant=tenant,
         settings=app_settings,
         qr_data_uri=qr_data_uri,
         property_photo_data_uri=property_photo_data_uri,
+        meter_photo_data_uris=meter_photo_data_uris,
     )
     # All images are inlined as base64 data URIs -- no relative asset refs, so
     # no base_url is needed and the render is fully self-contained.

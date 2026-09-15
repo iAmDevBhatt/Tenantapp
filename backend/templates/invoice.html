@@ -141,8 +141,8 @@
         <thead>
           <tr>
             <th>Description</th>
-            <th class="num">Start</th>
-            <th class="num">End</th>
+            <th class="num">Opening Reading</th>
+            <th class="num">Closing Reading</th>
             <th class="num">Usage</th>
             <th class="num">Rate</th>
             <th class="num">Amount</th>
@@ -151,17 +151,17 @@
         <tbody>
           <tr>
             <td class="desc">Room Meter (A)</td>
-            <td class="num">{{ invoice.room_start }}</td>
-            <td class="num">{{ invoice.room_end }}</td>
-            <td class="num">{{ invoice.room_usage }}</td>
+            <td class="num">{{ invoice.room_start | int }}</td>
+            <td class="num">{{ invoice.room_end | int }}</td>
+            <td class="num">{{ invoice.room_usage | int }}</td>
             <td class="num">&#8377;{{ '%.2f'|format(invoice.room_rate) }}</td>
             <td class="num">&#8377;{{ '%.2f'|format(invoice.room_amount) }}</td>
           </tr>
           <tr>
             <td class="desc">Water Meter (B)</td>
-            <td class="num">{{ invoice.water_start }}</td>
-            <td class="num">{{ invoice.water_end }}</td>
-            <td class="num">{{ invoice.water_usage }}</td>
+            <td class="num">{{ invoice.water_start | int }}</td>
+            <td class="num">{{ invoice.water_end | int }}</td>
+            <td class="num">{{ invoice.water_usage | int }}</td>
             <td class="num">&#8377;{{ '%.2f'|format(invoice.water_rate) }}</td>
             <td class="num">&#8377;{{ '%.2f'|format(invoice.water_amount) }}</td>
           </tr>
@@ -198,6 +198,15 @@
           Water usage on this invoice was divided by {{ invoice.water_divisor }} (shared meter).
         {% endif %}
       </div>
+
+      {% if meter_photo_data_uris %}
+      <div class="section-title" style="margin-top:24px;">Meter Reading Photos</div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:8px;">
+        {% for uri in meter_photo_data_uris %}
+        <img src="{{ uri }}" style="max-width:31%;border-radius:6px;border:1px solid #cbd5e1;object-fit:cover;" />
+        {% endfor %}
+      </div>
+      {% endif %}
     </div>
   </div>
 </body>

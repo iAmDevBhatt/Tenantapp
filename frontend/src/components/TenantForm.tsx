@@ -14,7 +14,7 @@ interface Props {
 const empty: TenantInput = {
   name: '', phone: '', propertyAddress: '', monthlyRent: '0', roomRate: '',
   waterRate: '', waterDivisor: 1, upiId: '', moveInDate: new Date().toISOString().slice(0, 10),
-  flatId: null,
+  flatId: null, permanentAddress: null, emergencyContactName: null, emergencyContactPhone: null,
 }
 
 export default function TenantForm({ initial, submitLabel, onSubmit, onCancel }: Props) {
@@ -177,6 +177,31 @@ export default function TenantForm({ initial, submitLabel, onSubmit, onCancel }:
           <input
             className="field-input" placeholder={l('form.placeholder.upiId', 'name@bank')}
             value={form.upiId ?? ''} onChange={(e) => set('upiId', e.target.value)}
+          />
+        </div>
+      </div>
+
+      <div>
+        <label className="field-label">{l('form.label.permanentAddress', 'Permanent Address')}</label>
+        <textarea
+          className="field-input min-h-[80px] py-2" rows={3}
+          value={form.permanentAddress ?? ''} onChange={(e) => set('permanentAddress', e.target.value || null)}
+        />
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div>
+          <label className="field-label">{l('form.label.emergencyContactName', 'Emergency Contact Name')}</label>
+          <input
+            className="field-input"
+            value={form.emergencyContactName ?? ''} onChange={(e) => set('emergencyContactName', e.target.value || null)}
+          />
+        </div>
+        <div>
+          <label className="field-label">{l('form.label.emergencyContactPhone', 'Emergency Contact Phone')}</label>
+          <input
+            className="field-input" type="tel"
+            value={form.emergencyContactPhone ?? ''} onChange={(e) => set('emergencyContactPhone', e.target.value || null)}
           />
         </div>
       </div>

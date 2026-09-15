@@ -4,6 +4,7 @@ from decimal import Decimal
 from pydantic import BaseModel
 
 from backend.schemas.invoice_writeoff import WriteOffOut
+from backend.schemas.tenant_document import DocumentOut
 
 # NOTE: rates, divisor, rent, usage and amount fields are intentionally absent
 # from the input schemas below. Pydantic drops anything a client sends that
@@ -66,5 +67,6 @@ class InvoiceOut(BaseModel):
     createdAt: datetime
     writeOffs: list[WriteOffOut] = []
     netPayable: Decimal = Decimal("0")
+    meterPhotos: list[DocumentOut] = []
 
     model_config = {"from_attributes": True}

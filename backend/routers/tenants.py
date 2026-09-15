@@ -23,6 +23,9 @@ def _tenant_out(t) -> TenantOut:
         hasPortalAccount=t.tenant_user is not None,
         hasProfilePhoto=bool(t.profile_photo_path),
         flatId=t.flat_id,
+        permanentAddress=t.permanent_address,
+        emergencyContactName=t.emergency_contact_name,
+        emergencyContactPhone=t.emergency_contact_phone,
         createdAt=t.created_at,
     )
 
@@ -39,6 +42,9 @@ def create_tenant(body: TenantCreate, db: Session = Depends(get_db)):
         "monthly_rent": body.monthlyRent, "room_rate": body.roomRate, "water_rate": body.waterRate,
         "water_divisor": body.waterDivisor, "upi_id": body.upiId, "move_in_date": body.moveInDate,
         "flat_id": body.flatId,
+        "permanent_address": body.permanentAddress,
+        "emergency_contact_name": body.emergencyContactName,
+        "emergency_contact_phone": body.emergencyContactPhone,
     }
     return _tenant_out(tenant_service.create_tenant(db, data))
 
@@ -56,6 +62,9 @@ def update_tenant(tenant_id: str, body: TenantUpdate, db: Session = Depends(get_
         "monthly_rent": body.monthlyRent, "room_rate": body.roomRate, "water_rate": body.waterRate,
         "water_divisor": body.waterDivisor, "upi_id": body.upiId, "move_in_date": body.moveInDate,
         "flat_id": body.flatId,
+        "permanent_address": body.permanentAddress,
+        "emergency_contact_name": body.emergencyContactName,
+        "emergency_contact_phone": body.emergencyContactPhone,
     }
     return _tenant_out(tenant_service.update_tenant(db, tenant, data))
 
@@ -87,6 +96,7 @@ def _doc_out(d) -> DocumentOut:
     return DocumentOut(
         id=d.id, tenantId=d.tenant_id, originalFilename=d.original_filename,
         contentType=d.content_type, sizeBytes=d.size_bytes, docType=d.doc_type,
+        invoiceId=d.invoice_id,
         uploadedAt=d.uploaded_at,
     )
 

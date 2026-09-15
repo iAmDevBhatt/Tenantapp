@@ -24,6 +24,9 @@ class Tenant(Base):
     move_out_date = Column(Date, nullable=True)
     profile_photo_path = Column(String, nullable=True)
     flat_id = Column(String(36), ForeignKey("property_flats.id"), nullable=True)
+    permanent_address = Column(Text, nullable=True)
+    emergency_contact_name = Column(String, nullable=True)
+    emergency_contact_phone = Column(String, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 

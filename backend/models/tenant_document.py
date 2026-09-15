@@ -17,7 +17,8 @@ class TenantDocument(Base):
     file_path = Column(String, nullable=False)          # path relative to UPLOADS_DIR
     content_type = Column(String, nullable=True)
     size_bytes = Column(Integer, nullable=True)
-    doc_type = Column(String, nullable=False, default="other")  # lease | id_proof | photo | other
+    doc_type = Column(String, nullable=False, default="other")  # lease | id_proof | photo | meter_reading | other
+    invoice_id = Column(String(36), ForeignKey("invoices.id"), nullable=True, index=True)
     uploaded_at = Column(DateTime, default=datetime.utcnow)
 
     tenant = relationship("Tenant", back_populates="documents")

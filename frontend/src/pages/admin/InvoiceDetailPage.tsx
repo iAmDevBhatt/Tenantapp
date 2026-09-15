@@ -1,10 +1,10 @@
-import { FormEvent, useEffect, useState } from 'react'
+import { FormEvent, useEffect, useRef, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { adminClient } from '@/api/adminClient'
 import { invoicesApi } from '@/api/invoices'
 import { tenantsApi } from '@/api/tenants'
 import { settingsApi } from '@/api/settings'
-import { Invoice, WriteOff } from '@/types/invoice'
+import { Invoice, WriteOff, MeterPhoto } from '@/types/invoice'
 import { Tenant } from '@/types/tenant'
 import { formatINR } from '@/utils/formulas'
 import { fetchAuthedBlob, triggerBlobDownload } from '@/utils/blob'
@@ -22,12 +22,16 @@ export default function InvoiceDetailPage() {
   const [downloading, setDownloading] = useState(false)
   const [pdfDownloaded, setPdfDownloaded] = useState(false)
   const [pdfError, setPdfError] = useState<string | null>(null)
+  const [photoSrcs, setPhotoSrcs] = useState<Map<string, string>>(new Map())
+  const [uploadingPhoto, setUploadingPhoto] = useState(false)
+  const photoInputRef = useRef<HTMLInputElement>(null)
   const { l } = useLabels()
 
   useEffect(() => {
     if (!invoiceId) return
     let qrUrl: string | null = null
     let photoUrl: string | null = null
+    const meterUrls: string[] = []
 
     setLoading(true)
     invoicesApi.get(invoiceId).then(async (inv) => {
@@ -40,12 +44,20 @@ export default function InvoiceDetailPage() {
         photoUrl = await fetchAuthedBlob(adminClient, '/settings/property-photo')
         setPhotoSrc(photoUrl)
       }
+      const srcMap = new Map<string, string>()
+      for (const mp of inv.meterPhotos) {
+        const url = await fetchAuthedBlob(adminClient, invoicesApi.meterPhotoDownloadUrl(inv.tenantId, mp.id))
+        meterUrls.push(url)
+        srcMap.set(mp.id, url)
+      }
+      setPhotoSrcs(srcMap)
       setLoading(false)
     })
 
     return () => {
       if (qrUrl) URL.revokeObjectURL(qrUrl)
       if (photoUrl) URL.revokeObjectURL(photoUrl)
+      meterUrls.forEach((u) => URL.revokeObjectURL(u))
     }
   }, [invoiceId])
 
@@ -101,6 +113,35 @@ export default function InvoiceDetailPage() {
     setInvoice(updated)
   }
 
+  async function handleUploadMeterPhoto(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file || !invoice || !tenant) return
+    setUploadingPhoto(true)
+    try {
+      const updated = await invoicesApi.uploadMeterPhoto(invoice.id, file)
+      const newPhoto = updated.meterPhotos[updated.meterPhotos.length - 1]
+      const url = await fetchAuthedBlob(adminClient, invoicesApi.meterPhotoDownloadUrl(tenant.id, newPhoto.id))
+      setPhotoSrcs((prev) => new Map(prev).set(newPhoto.id, url))
+      setInvoice(updated)
+    } finally {
+      setUploadingPhoto(false)
+      if (photoInputRef.current) photoInputRef.current.value = ''
+    }
+  }
+
+  async function handleDeleteMeterPhoto(photoId: string) {
+    if (!invoice) return
+    const updated = await invoicesApi.deleteMeterPhoto(invoice.id, photoId)
+    setPhotoSrcs((prev) => {
+      const next = new Map(prev)
+      const url = next.get(photoId)
+      if (url) URL.revokeObjectURL(url)
+      next.delete(photoId)
+      return next
+    })
+    setInvoice(updated)
+  }
+
   if (loading || !invoice || !tenant) return <p className="text-slate-500">{l('status.loading', 'Loading…')}</p>
 
   const hasWriteOffs = invoice.writeOffs.length > 0
@@ -137,6 +178,54 @@ export default function InvoiceDetailPage() {
           qrSrc={qrSrc}
           propertyPhotoSrc={photoSrc}
         />
+      </div>
+
+      {/* Meter reading photos */}
+      <div className="max-w-lg mx-auto card p-4 sm:p-6 space-y-3">
+        <div className="flex items-center justify-between">
+          <h2 className="font-semibold">{l('invoice.section.meterPhotos', 'Meter Reading Photos')}</h2>
+          {invoice.meterPhotos.length < 3 && (
+            <label className={`btn-secondary btn-compact cursor-pointer ${uploadingPhoto ? 'opacity-50 pointer-events-none' : ''}`}>
+              {uploadingPhoto ? l('btn.uploading', 'Uploading…') : l('invoice.meterPhotos.upload', 'Upload photo')}
+              <input ref={photoInputRef} type="file" accept="image/*" className="hidden" onChange={handleUploadMeterPhoto} />
+            </label>
+          )}
+          {invoice.meterPhotos.length >= 3 && (
+            <span className="text-xs text-slate-500">{l('invoice.meterPhotos.maxReached', 'Maximum 3 photos uploaded')}</span>
+          )}
+        </div>
+        {invoice.meterPhotos.length === 0 && (
+          <p className="text-sm text-slate-500">{l('invoice.meterPhotos.empty', 'No meter photos yet.')}</p>
+        )}
+        {invoice.meterPhotos.length > 0 && (
+          <div className="flex gap-3 flex-wrap">
+            {invoice.meterPhotos.map((mp: MeterPhoto) => {
+              const src = photoSrcs.get(mp.id)
+              return (
+                <div key={mp.id} className="relative group">
+                  {src ? (
+                    <img
+                      src={src}
+                      alt={mp.originalFilename}
+                      className="w-28 h-28 object-cover rounded-lg border border-slate-200 dark:border-slate-700"
+                    />
+                  ) : (
+                    <div className="w-28 h-28 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-100 flex items-center justify-center text-slate-400 text-xs">
+                      {l('status.loading', 'Loading…')}
+                    </div>
+                  )}
+                  <button
+                    className="absolute top-1 right-1 bg-red-600 text-white rounded-full w-5 h-5 text-xs flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                    onClick={() => handleDeleteMeterPhoto(mp.id)}
+                    title={l('btn.delete', 'Delete')}
+                  >
+                    ×
+                  </button>
+                </div>
+              )
+            })}
+          </div>
+        )}
       </div>
 
       {/* Write-offs section */}

@@ -10,6 +10,7 @@ class DocumentOut(BaseModel):
     contentType: str | None
     sizeBytes: int | None
     docType: str
+    invoiceId: str | None = None
     uploadedAt: datetime
 
     model_config = {"from_attributes": True}

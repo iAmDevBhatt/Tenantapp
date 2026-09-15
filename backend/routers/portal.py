@@ -12,13 +12,23 @@ from backend.models.tenant_user import TenantUser
 from backend.schemas.portal import PortalMeOut
 from backend.schemas.invoice import InvoiceOut
 from backend.schemas.invoice_writeoff import WriteOffOut
+from backend.schemas.tenant_document import DocumentOut
+from backend.models.tenant_document import TenantDocument
 from backend.services import invoice_service, settings_service, qr_service, tenant_service
 from backend.services.pdf_service import render_invoice_pdf, PdfUnavailableError, build_invoice_view
 
 router = APIRouter(prefix="/api/portal", tags=["portal"], dependencies=[Depends(get_current_tenant)])
 
 
-def _out(inv) -> InvoiceOut:
+def _doc_out(d) -> DocumentOut:
+    return DocumentOut(
+        id=d.id, tenantId=d.tenant_id, originalFilename=d.original_filename,
+        contentType=d.content_type, sizeBytes=d.size_bytes, docType=d.doc_type,
+        invoiceId=d.invoice_id, uploadedAt=d.uploaded_at,
+    )
+
+
+def _out(inv, db=None) -> InvoiceOut:
     write_offs = [
         WriteOffOut(
             id=wo.id, invoiceId=wo.invoice_id, amount=wo.amount,
@@ -26,6 +36,13 @@ def _out(inv) -> InvoiceOut:
         )
         for wo in inv.writeoffs
     ]
+    meter_photos = []
+    if db is not None:
+        meter_photos = [
+            _doc_out(d) for d in db.query(TenantDocument).filter(
+                TenantDocument.invoice_id == inv.id
+            ).order_by(TenantDocument.uploaded_at).all()
+        ]
     return InvoiceOut(
         id=inv.id, tenantId=inv.tenant_id, invoiceDate=inv.invoice_date,
         roomStart=inv.room_start, roomEnd=inv.room_end, waterStart=inv.water_start,
@@ -37,6 +54,7 @@ def _out(inv) -> InvoiceOut:
         paid=inv.paid, paidDate=inv.paid_date, createdAt=inv.created_at,
         writeOffs=write_offs,
         netPayable=invoice_service.net_payable(inv),
+        meterPhotos=meter_photos,
     )
 
 
@@ -58,14 +76,14 @@ def me(tenant_user: TenantUser = Depends(get_current_tenant), db: Session = Depe
 
 @router.get("/invoices", response_model=list[InvoiceOut])
 def list_my_invoices(tenant_user: TenantUser = Depends(get_current_tenant), db: Session = Depends(get_db)):
-    return [_out(i) for i in invoice_service.list_for_tenant(db, tenant_user.tenant_id)]
+    return [_out(i, db) for i in invoice_service.list_for_tenant(db, tenant_user.tenant_id)]
 
 
 @router.get("/invoices/{invoice_id}", response_model=InvoiceOut)
 def get_my_invoice(
     invoice_id: str, tenant_user: TenantUser = Depends(get_current_tenant), db: Session = Depends(get_db)
 ):
-    return _out(_owned_invoice_or_404(db, tenant_user, invoice_id))
+    return _out(_owned_invoice_or_404(db, tenant_user, invoice_id), db)
 
 
 @router.get("/invoices/{invoice_id}/pdf")

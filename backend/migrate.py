@@ -40,6 +40,12 @@ def run_migrations() -> None:
         _add_column_if_missing(cur, "tenants", "profile_photo_path", "TEXT")
         # R2: flat association (Property → Flat → Tenant)
         _add_column_if_missing(cur, "tenants", "flat_id", "TEXT")
+        # R4: tenant permanent address + emergency contact
+        _add_column_if_missing(cur, "tenants", "permanent_address", "TEXT")
+        _add_column_if_missing(cur, "tenants", "emergency_contact_name", "TEXT")
+        _add_column_if_missing(cur, "tenants", "emergency_contact_phone", "TEXT")
+        # R5: link tenant_documents to an invoice (for meter reading photos)
+        _add_column_if_missing(cur, "tenant_documents", "invoice_id", "TEXT")
         conn.commit()
     finally:
         conn.close()

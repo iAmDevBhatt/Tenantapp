@@ -84,19 +84,19 @@ export default function NewInvoicePage() {
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="field-label">{l('form.label.roomStart', 'Room Start')}</label>
-              <input className="field-input" type="number" step="0.01" value={roomStart} onChange={(e) => setRoomStart(e.target.value)} />
+              <input className="field-input" type="number" step="1" value={roomStart} onChange={(e) => setRoomStart(e.target.value)} />
             </div>
             <div>
               <label className="field-label">{l('form.label.roomEnd', 'Room End')}</label>
-              <input className="field-input" type="number" step="0.01" autoFocus value={roomEnd} onChange={(e) => setRoomEnd(e.target.value)} />
+              <input className="field-input" type="number" step="1" autoFocus value={roomEnd} onChange={(e) => setRoomEnd(e.target.value)} />
             </div>
             <div>
               <label className="field-label">{l('form.label.waterStart', 'Water Start')}</label>
-              <input className="field-input" type="number" step="0.01" value={waterStart} onChange={(e) => setWaterStart(e.target.value)} />
+              <input className="field-input" type="number" step="1" value={waterStart} onChange={(e) => setWaterStart(e.target.value)} />
             </div>
             <div>
               <label className="field-label">{l('form.label.waterEnd', 'Water End')}</label>
-              <input className="field-input" type="number" step="0.01" value={waterEnd} onChange={(e) => setWaterEnd(e.target.value)} />
+              <input className="field-input" type="number" step="1" value={waterEnd} onChange={(e) => setWaterEnd(e.target.value)} />
             </div>
           </div>
 

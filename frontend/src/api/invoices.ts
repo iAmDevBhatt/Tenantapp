@@ -24,6 +24,18 @@ export const invoicesApi = {
   deleteWriteOff: (invoiceId: string, writeOffId: string) =>
     adminClient.delete<Invoice>(`/invoices/${invoiceId}/writeoffs/${writeOffId}`).then((r) => r.data),
 
+  uploadMeterPhoto: (invoiceId: string, file: File) => {
+    const fd = new FormData()
+    fd.append('file', file)
+    return adminClient.post<Invoice>(`/invoices/${invoiceId}/photos`, fd).then((r) => r.data)
+  },
+
+  deleteMeterPhoto: (invoiceId: string, photoId: string) =>
+    adminClient.delete<Invoice>(`/invoices/${invoiceId}/photos/${photoId}`).then((r) => r.data),
+
+  meterPhotoDownloadUrl: (tenantId: string, photoId: string) =>
+    `/tenants/${tenantId}/documents/${photoId}/download`,
+
   pdfUrl: (id: string) => `/invoices/${id}/pdf`,
   qrUrl: (id: string) => `/invoices/${id}/qr.png`,
 }

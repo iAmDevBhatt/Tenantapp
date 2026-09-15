@@ -1,3 +1,14 @@
+export interface MeterPhoto {
+  id: string
+  tenantId: string
+  originalFilename: string
+  contentType: string | null
+  sizeBytes: number | null
+  docType: string
+  invoiceId: string | null
+  uploadedAt: string
+}
+
 export interface WriteOff {
   id: string
   invoiceId: string
@@ -42,6 +53,7 @@ export interface Invoice {
   createdAt: string
   writeOffs: WriteOff[]
   netPayable: string
+  meterPhotos: MeterPhoto[]
 }
 
 export interface InvoiceCreateInput {

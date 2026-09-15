@@ -14,6 +14,9 @@ export interface Tenant {
   hasPortalAccount: boolean
   hasProfilePhoto: boolean
   flatId: string | null
+  permanentAddress: string | null
+  emergencyContactName: string | null
+  emergencyContactPhone: string | null
   createdAt: string
 }
 
@@ -28,6 +31,9 @@ export interface TenantInput {
   upiId: string | null
   moveInDate: string
   flatId?: string | null
+  permanentAddress?: string | null
+  emergencyContactName?: string | null
+  emergencyContactPhone?: string | null
 }
 
 export interface NextInvoiceDefaults {
@@ -43,6 +49,7 @@ export interface TenantDocument {
   contentType: string | null
   sizeBytes: number | null
   docType: string
+  invoiceId: string | null
   uploadedAt: string
 }
 

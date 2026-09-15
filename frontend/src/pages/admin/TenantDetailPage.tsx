@@ -169,6 +169,17 @@ export default function TenantDetailPage() {
                 <Field label={l('field.upiId', 'UPI ID')} value={tenant.upiId || '—'} />
                 <Field label={l('field.moveInDate', 'Move-in Date')} value={tenant.moveInDate} />
                 {tenant.moveOutDate && <Field label={l('field.moveOutDate', 'Move-out Date')} value={tenant.moveOutDate} />}
+                {tenant.permanentAddress && (
+                  <div className="sm:col-span-2">
+                    <Field label={l('field.permanentAddress', 'Permanent Address')} value={tenant.permanentAddress} />
+                  </div>
+                )}
+                {tenant.emergencyContactName && (
+                  <Field label={l('field.emergencyContactName', 'Emergency Contact')} value={tenant.emergencyContactName} />
+                )}
+                {tenant.emergencyContactPhone && (
+                  <Field label={l('field.emergencyContactPhone', 'Emergency Phone')} value={tenant.emergencyContactPhone} />
+                )}
               </dl>
               <button className="btn-secondary" onClick={() => setEditing(true)}>{l('btn.editDetails', 'Edit details')}</button>
             </div>
