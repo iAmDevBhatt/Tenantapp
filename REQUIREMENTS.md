@@ -7,6 +7,7 @@ CORE FEATURES
 
 1. Tenant management
    - Add/edit tenants: name, property address, monthly rent, room-meter rate (₹/unit), water-meter rate (₹/unit), a "water meter shared by N tenants" setting (usage is divided by N before billing — default N=1), UPI ID for payment, move-in date.
+   - Optional extended profile fields per tenant: permanent address (textarea) and emergency/guardian contact name + phone. Displayed in the profile tab when populated.
    - Mark a tenant "moved out" (soft-delete / inactive) instead of deleting them, so their invoice history is preserved. Inactive tenants can be reactivated. New tenants can be added any time.
    - Per-tenant documents: ability to upload and store files against a tenant record (lease agreement, ID proof, move-in photos, etc.) — list, download, delete. Stored durably (see PERSISTENCE below), not just referenced by a broken local path.
    - Per-tenant passport-size profile photo (DP): upload/replace/delete a circular avatar photo. Displayed on the dashboard tenant cards and the tenant detail page header.
@@ -48,19 +49,21 @@ CORE FEATURES
 6. Invoice document (must visually match the reference design — see layout below), with:
    - A "Download PDF" button that exports exactly what's on screen.
    - A "Send via WhatsApp" button: builds a `wa.me/<tenant phone number>?text=<prefilled message>` link and opens it in a new tab/WhatsApp app. Message uses net payable when write-offs exist. Since WhatsApp click-to-chat links can't attach files automatically, the flow is: download the PDF, then tap Send via WhatsApp, then attach it in the opened chat.
+   - Meter reading photos: upload up to 3 photos per invoice (e.g. photos of meter displays). Thumbnails shown on the invoice detail page; photos embedded at the bottom of the PDF. Stored under `UPLOADS_DIR` like all other tenant documents.
 
 INVOICE LAYOUT TO MATCH (reference: a blue-and-white printable receipt)
 - Header banner (deep blue background, white text): small building photo/icon, title "Rent & Utilities Invoice", and the invoice date.
 - "Tenant Information" section: Tenant Name, Property Address (multi-line).
-- "Utility Charges" section: a table with columns Description | Start | End | Usage | Rate | Amount, one row for "Room Meter (A)" and one for "Water Meter (B)".
+- "Utility Charges" section: a table with columns Description | Opening Reading | Closing Reading | Usage | Rate | Amount, one row for "Room Meter (A)" and one for "Water Meter (B)". Meter readings and usage are whole numbers (no decimal places).
 - "Rent & Dues" section: Monthly Rent (C), Previous Dues (D), then a highlighted total bar "Total Payable (A+B+C+D)" = the total.
 - Payment area: UPI ID text, plus a QR code. Generate the QR dynamically per invoice from a UPI deep link (`upi://pay?pa=<upiId>&pn=<owner name>&am=<total>&cu=INR`) so the amount is pre-filled when the tenant scans it — don't just use a static image.
 - A small notes footer, e.g. payment due within N days of the invoice, and (if water is shared) a note that usage was divided by the shared-by count.
+- Optional "Meter Reading Photos" section at the bottom (shown only when photos are attached).
 - The invoice/document view should look like a printed paper (white background, blue accents) regardless of the app's own light/dark theme.
 
 DATA MODEL (suggested)
-- tenants: { id, name, phone, propertyAddress, monthlyRent, roomRate, waterRate, waterDivisor, upiId, active, moveInDate, moveOutDate, profilePhotoPath, flatId }
-- tenant_documents: { id, tenantId, filename, fileUrl/path, uploadedAt, type (lease/id_proof/photo/other) }
+- tenants: { id, name, phone, propertyAddress, monthlyRent, roomRate, waterRate, waterDivisor, upiId, active, moveInDate, moveOutDate, profilePhotoPath, flatId, permanentAddress, emergencyContactName, emergencyContactPhone }
+- tenant_documents: { id, tenantId, filename, fileUrl/path, uploadedAt, docType (lease/id_proof/photo/meter_reading/other), invoiceId (nullable FK → invoices, set for meter_reading docs) }
 - invoices: { id, tenantId, invoiceDate, roomStart, roomEnd, waterStart, waterEnd, roomRate, waterRate, waterDivisor, monthlyRent, previousDues, roomAmount, waterAmount, totalPayable, paid, paidDate, createdAt }
 - invoice_writeoffs: { id, invoiceId, amount, reason, writtenOffBy, writtenOffAt }
 - meter_submissions: { id, tenantId, photoUrl, submittedAt, status (pending/applied/rejected), appliedToInvoiceId } — see ROADMAP below; include this table now even though the feature ships later, so the schema doesn't need a breaking migration.

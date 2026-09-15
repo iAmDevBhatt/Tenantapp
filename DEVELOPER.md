@@ -44,19 +44,23 @@ backend/
 │   ├── security.py      bcrypt hashing (NOT passlib) + JWT encode/decode
 │   └── deps.py          get_current_admin / get_current_tenant
 ├── models/              SQLAlchemy ORM — one file per table
-│   ├── tenant.py          + profile_photo_path (TEXT), flat_id (FK → property_flats)
-│   ├── invoice.py         + writeoffs relationship
+│   ├── tenant.py          + profile_photo_path, flat_id, permanent_address,
+│   │                        emergency_contact_name, emergency_contact_phone
+│   ├── invoice.py         + writeoffs relationship, meter_photos viewonly relationship
 │   ├── invoice_writeoff.py  write-off child table
+│   ├── tenant_document.py   + invoice_id (nullable FK → invoices), doc_type="meter_reading"
 │   ├── property.py          Property + PropertyFlat models
 │   └── ...
 ├── schemas/             Pydantic request/response models
-│   ├── tenant.py          TenantOut includes hasProfilePhoto, flatId
-│   ├── invoice.py         InvoiceOut includes writeOffs[], netPayable
+│   ├── tenant.py          TenantOut includes hasProfilePhoto, flatId,
+│   │                        permanentAddress, emergencyContactName, emergencyContactPhone
+│   ├── invoice.py         InvoiceOut includes writeOffs[], netPayable, meterPhotos[]
 │   ├── invoice_writeoff.py  WriteOffCreate, WriteOffOut
+│   ├── tenant_document.py   DocumentOut includes invoiceId
 │   └── property.py        PropertyOut, FlatOut, create/update variants
 ├── routers/             thin FastAPI handlers
 │   ├── tenants.py         + profile-photo CRUD, download-all (zip)
-│   ├── invoices.py        + write-off CRUD
+│   ├── invoices.py        + write-off CRUD, meter-photo upload/delete
 │   ├── properties.py      full CRUD for properties + flats
 │   └── ...
 ├── services/            business logic
@@ -65,7 +69,8 @@ backend/
 │   ├── document_service.py  + save_profile_photo, delete_profile_photo, build_tenant_zip
 │   ├── property_service.py  list/create/update/delete properties and flats
 │   └── ...
-├── templates/invoice.html   Jinja2 template for the PDF
+├── templates/invoice.html   Jinja2 template for the PDF; Opening/Closing Reading columns;
+│                             meter values rendered as integers; meter photos section at bottom
 └── tests/               pytest — conftest.py spins up a throwaway sqlite file per run
 ```
 
@@ -77,11 +82,13 @@ frontend/src/
 │   ├── adminClient.ts / portalClient.ts   separate axios instances, separate localStorage keys
 │   ├── tenants.ts       + uploadProfilePhoto, deleteProfilePhoto, profilePhotoUrl,
 │   │                      downloadAllDocsUrl
-│   ├── invoices.ts      + addWriteOff, deleteWriteOff
+│   ├── invoices.ts      + addWriteOff, deleteWriteOff, uploadMeterPhoto, deleteMeterPhoto,
+│   │                      meterPhotoDownloadUrl
 │   └── properties.ts    full CRUD for properties + flats
 ├── types/
-│   ├── tenant.ts        + hasProfilePhoto: boolean, flatId: string | null
-│   ├── invoice.ts       + WriteOff, WriteOffCreateInput, writeOffs[], netPayable
+│   ├── tenant.ts        + hasProfilePhoto, flatId, permanentAddress,
+│   │                      emergencyContactName, emergencyContactPhone
+│   ├── invoice.ts       + WriteOff, writeOffs[], netPayable, MeterPhoto, meterPhotos[]
 │   └── property.ts      Property, PropertyFlat, create/input interfaces
 ├── hooks/
 │   ├── useLabels.ts     loads /labels.properties once (module-level cache); l(key, fallback)
@@ -91,14 +98,19 @@ frontend/src/
 │   └── blob.ts          fetchAuthedBlob() + triggerBlobDownload() — used for images, PDFs, zips
 ├── components/
 │   ├── TenantAvatar.tsx   circular avatar; fetches blob, shows initials fallback; sizes sm/md/lg
-│   ├── TenantForm.tsx     + Property→Flat dropdowns that auto-fill propertyAddress
+│   ├── TenantForm.tsx     + Property→Flat dropdowns, permanentAddress textarea,
+│   │                        emergencyContactName + emergencyContactPhone fields
 │   ├── PropertiesManager.tsx  full CRUD UI embedded in Settings page
 │   ├── DocumentList.tsx
 │   └── invoice/InvoiceDocument.tsx + invoice-print.css
+│                            Opening/Closing Reading headers; meter values as integers
 └── pages/
     ├── admin/DashboardPage.tsx      tenant cards include TenantAvatar
-    ├── admin/TenantDetailPage.tsx   + profile photo upload/delete, download-all zip button
-    ├── admin/InvoiceDetailPage.tsx  + write-offs section + WriteOffForm
+    ├── admin/TenantDetailPage.tsx   + profile photo, download-all, permanentAddress,
+    │                                  emergencyContact fields in profile view
+    ├── admin/InvoiceDetailPage.tsx  + write-offs section, meter reading photos card
+    │                                  (upload/delete/thumbnail, max 3 per invoice)
+    ├── admin/NewInvoicePage.tsx     reading inputs use step=1 (whole numbers only)
     └── admin/SettingsPage.tsx       + PropertiesManager section
 ```
 
@@ -114,7 +126,7 @@ All user-visible strings live in `frontend/public/labels.properties` (Java `.pro
 
 ## How To (common tasks)
 
-**Add a new tenant field**: add the column to `models/tenant.py` + a guarded `_add_column_if_missing` step in `migrate.py` + the field in `schemas/tenant.py` + wire it through `routers/tenants.py`'s `_tenant_out`/create/update + `frontend/src/types/tenant.ts` + `TenantForm.tsx`.
+**Add a new tenant field**: add the column to `models/tenant.py` + a guarded `_add_column_if_missing` step in `migrate.py` + the field in `schemas/tenant.py` + wire it through `routers/tenants.py`'s `_tenant_out`/create/update + `frontend/src/types/tenant.ts` + `TenantForm.tsx` + `TenantDetailPage.tsx` (read-only view).
 
 **Add a new property or flat field**: edit `models/property.py` + `schemas/property.py` + `services/property_service.py` + `routers/properties.py` + `frontend/src/types/property.ts` + `api/properties.ts` + `PropertiesManager.tsx`.
 

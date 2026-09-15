@@ -13,12 +13,13 @@ SQLite by default, WAL mode, at `DATABASE_URL` (default `sqlite:///./data/app.db
 | Table | Purpose |
 |---|---|
 | `admin_users` | The landlord's login (usually exactly one row). Seeded from `ADMIN_USERNAME`/`ADMIN_PASSWORD` env vars if empty. |
-| `tenants` | Tenant records: rates, rent, UPI, active/inactive (moved-out), move-in/out dates, `profile_photo_path` (nullable), `flat_id` FK → `property_flats`. |
-| `tenant_documents` | Uploaded files (lease/id_proof/photo/other) against a tenant, stored under `UPLOADS_DIR/tenants/<tenant_id>/`. |
+| `tenants` | Tenant records: rates, rent, UPI, active/inactive (moved-out), move-in/out dates, `profile_photo_path` (nullable), `flat_id` FK → `property_flats`, `permanent_address` (nullable TEXT), `emergency_contact_name` (nullable), `emergency_contact_phone` (nullable). |
+| `tenant_documents` | Uploaded files (lease/id_proof/photo/meter_reading/other) against a tenant, stored under `UPLOADS_DIR/tenants/<tenant_id>/`. `invoice_id` (nullable FK → `invoices`) is set for `doc_type="meter_reading"` docs — links them to a specific invoice. |
 | `tenant_users` | A tenant's portal login (1:1 with `tenants`, created at self-registration). |
 | `tenant_invites` | One-time invite codes a landlord generates per tenant so they can self-register a portal login. |
 | `invoices` | Immutable invoice snapshots — see §6. |
 | `invoice_writeoffs` | Write-off entries against an invoice. `total_payable` on the invoice never changes; net payable is computed as `total_payable − Σ write_offs`. |
+| *(meter photos)* | Stored in `tenant_documents` with `doc_type="meter_reading"` and `invoice_id` set. Up to 3 per invoice. Reuses all existing file-serve/delete infrastructure. |
 | `properties` | Named properties (name + address). Parent of `property_flats`. |
 | `property_flats` | Named flats/units within a property (e.g. "2 BHK", "Shop 1"). Referenced by `tenants.flat_id`. |
 | `meter_submissions` | **Schema only, no router/UI in v1** — Phase 2 extension point for tenants uploading meter-reading photos. |
@@ -78,6 +79,8 @@ Legend: **A** = admin JWT required, **T** = tenant JWT required, **P** = public.
 | GET | `/api/invoices/{id}/qr.png` | A | `image/png` |
 | POST | `/api/invoices/{id}/writeoffs` | A | `{amount, reason}` — amount must be > 0 and ≤ netPayable; only on unpaid invoices |
 | DELETE | `/api/invoices/{id}/writeoffs/{wid}` | A | undo a write-off |
+| POST | `/api/invoices/{id}/photos` | A | multipart upload — max 3 per invoice; saves as `doc_type="meter_reading"` with `invoice_id` set |
+| DELETE | `/api/invoices/{id}/photos/{photo_id}` | A | delete a meter reading photo |
 | GET | `/api/portal/me` | T | own tenant profile |
 | GET | `/api/portal/invoices` | T | own invoices only |
 | GET | `/api/portal/invoices/{id}` | T | 404 if not this tenant's invoice |
@@ -111,11 +114,13 @@ Computed at serialization time, never stored on the invoice row. Exposed as `net
 - `roomStart`/`waterStart` = the tenant's most recent invoice's `roomEnd`/`waterEnd` (0 if no invoices yet).
 - `previousDues` = `max(total_payable − Σ write_offs, 0)` if the last invoice is unpaid, else `0`.
 
-## 7. Profile Photos & File Storage
+## 7. Profile Photos, Meter Photos & File Storage
 
 Profile photos are stored alongside documents under `UPLOADS_DIR/tenants/{tenant_id}/profile_{uuid}{ext}`. The path is kept in `tenants.profile_photo_path`. `TenantOut.hasProfilePhoto` is a boolean derived from this column — the frontend uses it to decide whether to render a `TenantAvatar` or an initials fallback.
 
-`build_tenant_zip` (in `services/document_service.py`) returns an in-memory zip (`io.BytesIO`) of all tenant documents plus the profile photo (if present), served by the `download-all` route.
+Meter reading photos are stored as `tenant_documents` rows with `doc_type="meter_reading"` and `invoice_id` set to the owning invoice. They share the same storage path pattern and all existing file-serve/delete infrastructure. Up to 3 per invoice (enforced in `routers/invoices.py`). `InvoiceOut.meterPhotos` carries them as a `list[DocumentOut]`, populated by querying `TenantDocument` where `invoice_id == invoice.id` (not via an ORM eager load). In `pdf_service.py`, they are read as base64 data URIs and passed to the Jinja2 template as `meter_photo_data_uris`.
+
+`build_tenant_zip` (in `services/document_service.py`) returns an in-memory zip (`io.BytesIO`) of all tenant documents plus the profile photo (if present) — meter reading photos are included in the zip since they are regular `tenant_documents` rows.
 
 ## 8. Properties & Flats
 

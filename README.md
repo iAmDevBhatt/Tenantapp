@@ -5,11 +5,13 @@ A self-hosted web app that replaces a landlord's Google Sheet workflow for gener
 ## Features
 
 - **Tenant management** — active/inactive (moved-out) tenants, per-tenant documents (lease, ID proof, photos), rates, UPI ID, phone. Upload a passport-size profile photo (DP) per tenant — shown as a circular avatar on the dashboard and tenant profile page.
+- **Tenant profile fields** — permanent address and emergency/guardian contact name + phone stored per tenant (optional, shown in profile view).
 - **Properties & Flats** — define multiple properties, each with named flats/units. When adding or editing a tenant, pick a Property → Flat from dropdowns to auto-fill the property address (still manually editable).
 - **New invoice** — auto-fills start readings from the last invoice and previous dues from the last unpaid invoice (net of any write-offs); live-computed preview; saved as an immutable snapshot.
 - **Invoice history** — per tenant, toggle paid/unpaid, re-download any past invoice's PDF (always renders from its own saved snapshot, never today's rates), delete mistaken entries.
 - **Invoice write-offs** — write off part or all of an outstanding invoice (with a required reason) without changing the original total. Net payable = total − Σ write-offs. Each write-off is audited (amount, reason, author, timestamp) and can be undone individually.
-- **Invoice PDF** — server-rendered (WeasyPrint), blue-and-white printable design matching the reference layout, with a dynamic UPI QR code (amount pre-filled).
+- **Invoice meter reading photos** — attach up to 3 photos per invoice (e.g. photos of meter displays). Photos appear as thumbnails on the invoice detail page and are embedded at the bottom of the downloaded PDF.
+- **Invoice PDF** — server-rendered (WeasyPrint), blue-and-white printable design matching the reference layout, with a dynamic UPI QR code (amount pre-filled). Utility table shows "Opening Reading" / "Closing Reading" columns; meter values display as whole numbers.
 - **Send via WhatsApp** — opens a prefilled `wa.me` chat with the tenant; the message uses the net payable when write-offs exist.
 - **Download all documents (zip)** — one-click zip of all a tenant's uploaded documents plus their profile photo.
 - **Tenant portal** — each tenant gets their own read-only login (self-registered via a landlord-issued invite link) to view and download their own invoice history.
@@ -93,4 +95,4 @@ Restore with `./scripts/restore.sh <path-to-backup.tar.gz>` (stop the app first)
 
 ## Roadmap (not built yet)
 
-Tenant meter-reading submission: tenants photograph their meter each month and upload it; the landlord reviews and applies it to the next invoice instead of retyping readings. The `meter_submissions` table exists in the schema as an extension point, but no router/UI is wired up yet.
+Tenant meter-reading submission: tenants photograph their meter each month and upload it via the portal; the landlord reviews and applies it to the next invoice instead of retyping readings. The `meter_submissions` table exists in the schema as an extension point, but no router/UI is wired up yet (the landlord can already attach meter photos manually to an invoice — this roadmap item is for tenant-initiated submission).
