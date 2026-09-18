@@ -3,52 +3,46 @@ Base.metadata.create_all() in main.py/here; changes to EXISTING tables go
 here as guarded ALTER TABLE steps so re-running on every container start is
 always safe. No Alembic -- this app's schema is simple enough that a
 hand-written, ordered list of guarded steps is simpler and just as honest
-(see WEB_APP_BLUEPRINT.md Option A)."""
-import sqlite3
+(see WEB_APP_BLUEPRINT.md Option A).
+
+Uses the app's own SQLAlchemy `engine` for everything, including the guarded
+ALTER TABLE steps -- not a second, manually-opened sqlite3.connect(). That
+engine already resolves DATABASE_URL correctly (relative dev paths, and the
+`sqlite:////absolute/path` form Docker uses); re-parsing the URL by hand here
+previously mishandled the 4-slash absolute form and broke migrations under
+Docker -- don't reintroduce that."""
+from sqlalchemy import text
+from sqlalchemy.engine import Connection
 
 from backend.core.config import settings
 from backend.database import engine, Base
 import backend.models  # noqa: F401
 
 
-def _sqlite_path_from_url(url: str) -> str | None:
-    prefix = "sqlite:///"
-    if url.startswith(prefix):
-        return url[len(prefix):].lstrip("/")
-    return None
-
-
-def _add_column_if_missing(cursor: sqlite3.Cursor, table: str, column: str, ddl_type: str) -> None:
-    cursor.execute(f"PRAGMA table_info({table})")
-    existing = {row[1] for row in cursor.fetchall()}
+def _add_column_if_missing(conn: Connection, table: str, column: str, ddl_type: str) -> None:
+    existing = {row[1] for row in conn.execute(text(f"PRAGMA table_info({table})")).fetchall()}
     if column not in existing:
         print(f"migrate: adding {table}.{column}")
-        cursor.execute(f"ALTER TABLE {table} ADD COLUMN {column} {ddl_type}")
+        conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {column} {ddl_type}"))
 
 
 def run_migrations() -> None:
     Base.metadata.create_all(bind=engine)
 
-    db_path = _sqlite_path_from_url(settings.DATABASE_URL)
-    if not db_path:
+    if not settings.DATABASE_URL.startswith("sqlite"):
         return  # non-sqlite backends: rely on create_all only for now
 
-    conn = sqlite3.connect(db_path)
-    try:
-        cur = conn.cursor()
+    with engine.begin() as conn:
         # R1: tenant passport photo
-        _add_column_if_missing(cur, "tenants", "profile_photo_path", "TEXT")
+        _add_column_if_missing(conn, "tenants", "profile_photo_path", "TEXT")
         # R2: flat association (Property → Flat → Tenant)
-        _add_column_if_missing(cur, "tenants", "flat_id", "TEXT")
+        _add_column_if_missing(conn, "tenants", "flat_id", "TEXT")
         # R4: tenant permanent address + emergency contact
-        _add_column_if_missing(cur, "tenants", "permanent_address", "TEXT")
-        _add_column_if_missing(cur, "tenants", "emergency_contact_name", "TEXT")
-        _add_column_if_missing(cur, "tenants", "emergency_contact_phone", "TEXT")
+        _add_column_if_missing(conn, "tenants", "permanent_address", "TEXT")
+        _add_column_if_missing(conn, "tenants", "emergency_contact_name", "TEXT")
+        _add_column_if_missing(conn, "tenants", "emergency_contact_phone", "TEXT")
         # R5: link tenant_documents to an invoice (for meter reading photos)
-        _add_column_if_missing(cur, "tenant_documents", "invoice_id", "TEXT")
-        conn.commit()
-    finally:
-        conn.close()
+        _add_column_if_missing(conn, "tenant_documents", "invoice_id", "TEXT")
 
 
 if __name__ == "__main__":
