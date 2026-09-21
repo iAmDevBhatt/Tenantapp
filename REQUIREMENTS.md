@@ -68,7 +68,7 @@ DATA MODEL (suggested)
 - tenant_documents: { id, tenantId, filename, fileUrl/path, uploadedAt, docType (lease/id_proof/photo/meter_reading/other), invoiceId (nullable FK → invoices, set for meter_reading docs) }
 - invoices: { id, tenantId, invoiceDate, roomStart, roomEnd, waterStart, waterEnd, roomRate, waterRate, waterDivisor, monthlyRent, previousDues, roomAmount, waterAmount, totalPayable, paid, paidDate, createdAt }
 - invoice_writeoffs: { id, invoiceId, amount, reason, writtenOffBy, writtenOffAt }
-- meter_submissions: { id, tenantId, photoUrl, submittedAt, status (pending/applied/rejected), appliedToInvoiceId } — see ROADMAP below; include this table now even though the feature ships later, so the schema doesn't need a breaking migration.
+- meter_submissions: { id, tenantId, photoPath, photoType (flat_meter|water_meter|property|other), originalFilename, contentType, sizeBytes, submittedAt, status (pending|approved|applied|rejected), appliedToInvoiceId, notes } — staging table for tenant-uploaded meter reading photos. Status flow: pending → approved → applied (when tagged to an invoice) or pending → rejected. When a submission is tagged to an invoice, a TenantDocument row (doc_type="meter_reading") is also created via save_meter_submission_as_document().
 - properties: { id, name, address, createdAt }
 - property_flats: { id, propertyId, label, createdAt }
 - settings: { ownerName, defaultUpiId, propertyPhotoUrl } — owner-level info used as the UPI payee name and prefilled on new tenants.
@@ -83,8 +83,8 @@ UI STRING EXTERNALISATION
 - The frontend loads this file once via a `useLabels()` hook (`frontend/src/hooks/useLabels.ts`); components call `l('key', 'fallback')` — never inline string literals.
 - When adding new features, append new keys to `labels.properties` first, then use `l('key', 'fallback')` in components. Never hardcode user-visible text in JSX or TypeScript directly.
 
-ROADMAP (design for, don't build yet)
-- Tenant meter-reading submission: eventually, tenants get a link/portal to upload a photo of their meter reading each month; the landlord reviews the photo and applies the reading to that tenant's next invoice instead of retyping it manually. The `meter_submissions` table above and a tenant-facing upload page (even a bare-bones one) are the extension points — call this out as a stretch goal or Phase 2, not required for v1.
+BUILT (previously roadmap)
+- Tenant meter-reading submission: tenants upload photos (flat meter, water meter, whole property) via the portal. Landlord reviews and approves/rejects from TenantDetailPage. Approved photos appear in the New Invoice form as a picker; selecting them tags them to the invoice (status becomes "applied") and they no longer appear for future invoices. Tagged photos visible to tenant in their invoice view. Rate-limited portal upload (20/minute); image-only MIME validation; 20 MB cap.
 
 NON-FUNCTIONAL
 - Should work well on a phone (this will mostly be used from a phone).

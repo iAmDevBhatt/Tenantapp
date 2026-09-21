@@ -52,25 +52,38 @@ backend/
 │   ├── tenant_document.py   + invoice_id (nullable FK → invoices), doc_type="meter_reading",
 │   │                          tenant_visible (bool, default False)
 │   ├── tenant_user.py         + portal_access_blocked (bool, default False)
+│   ├── meter_submission.py  MeterSubmission: photo_type, original_filename, content_type,
+│   │                          size_bytes; status: pending|approved|applied|rejected
 │   ├── property.py          Property + PropertyFlat models
 │   └── ...
 ├── schemas/             Pydantic request/response models
 │   ├── tenant.py          TenantOut includes hasProfilePhoto, flatId,
 │   │                        permanentAddress, emergencyContactName, emergencyContactPhone
 │   ├── invoice.py         InvoiceOut includes writeOffs[], netPayable, meterPhotos[],
-│   │                        amountPaid (nullable), outstanding (computed)
+│   │                        amountPaid (nullable), outstanding (computed);
+│   │                        InvoiceCreate includes meterSubmissionIds (list[str], default [])
 │   ├── invoice_writeoff.py  WriteOffCreate, WriteOffOut
 │   ├── tenant_document.py   DocumentOut includes invoiceId, tenantVisible
+│   ├── meter_submission.py  MeterSubmissionOut (all submission fields, camelCase);
+│   │                          ReviewRequest {action: "approve"|"reject", notes?}
 │   └── property.py        PropertyOut, FlatOut, create/update variants
 ├── routers/             thin FastAPI handlers
-│   ├── tenants.py         + profile-photo CRUD, download-all (zip)
-│   ├── invoices.py        + write-off CRUD, meter-photo upload/delete
+│   ├── tenants.py         + profile-photo CRUD, download-all (zip),
+│   │                        meter-submission review (list/photo/review endpoints)
+│   ├── invoices.py        + write-off CRUD, meter-photo upload/delete;
+│   │                        tags approved MeterSubmissions on invoice create
+│   ├── portal.py          + meter-submission upload + list (portal write routes);
+│   │                        meter-photo stream for invoice view
 │   ├── properties.py      full CRUD for properties + flats
 │   └── ...
 ├── services/            business logic
 │   ├── invoice_service.py   billing formula + net_payable() + write-off helpers
 │   │                         next_invoice_defaults uses net balance for previous dues
-│   ├── document_service.py  + save_profile_photo, delete_profile_photo, build_tenant_zip
+│   ├── document_service.py  + save_profile_photo, delete_profile_photo, build_tenant_zip;
+│   │                          save_meter_submission_file (write file, return path+filename),
+│   │                          meter_submission_absolute_path (full fs path from ms row),
+│   │                          save_meter_submission_as_document (create TenantDocument,
+│   │                          mark ms applied, commit — the tagging transaction)
 │   ├── property_service.py  list/create/update/delete properties and flats
 │   └── ...
 ├── templates/invoice.html   Jinja2 template for the PDF; Opening/Closing Reading columns;
@@ -89,12 +102,16 @@ frontend/src/
 │   ├── invoices.ts      + addWriteOff, deleteWriteOff, uploadMeterPhoto, deleteMeterPhoto,
 │   │                      meterPhotoDownloadUrl, recordPayment
 │   ├── documents.ts     + toggleVisibility
+│   ├── meterSubmissions.ts  portal: submitPhoto, listMine, portalMeterPhotoUrl;
+│   │                          admin: listForTenant, previewPhotoUrl, review
 │   └── properties.ts    full CRUD for properties + flats
 ├── types/
 │   ├── tenant.ts        + hasProfilePhoto, portalAccessBlocked, flatId, permanentAddress,
 │   │                      emergencyContactName, emergencyContactPhone
 │   ├── invoice.ts       + WriteOff, writeOffs[], netPayable, MeterPhoto, meterPhotos[],
-│   │                      amountPaid (string|null), outstanding (string)
+│   │                      amountPaid (string|null), outstanding (string);
+│   │                      InvoiceCreateInput includes meterSubmissionIds?: string[]
+│   ├── meterSubmission.ts   MeterSubmission interface (id, tenantId, photoType, status, etc.)
 │   └── property.ts      Property, PropertyFlat, create/input interfaces
 ├── hooks/
 │   ├── useLabels.ts     loads /labels.properties once (module-level cache); l(key, fallback)
@@ -114,15 +131,23 @@ frontend/src/
 └── pages/
     ├── admin/DashboardPage.tsx      tenant cards include TenantAvatar
     ├── admin/TenantDetailPage.tsx   + profile photo, download-all, permanentAddress,
-    │                                  emergencyContact fields in profile view
+    │                                  emergencyContact fields in profile view;
+    │                                  Meter Photos tab: pending review queue (approve/reject
+    │                                  with inline notes textarea), approved list, history
     ├── admin/InvoiceDetailPage.tsx  + write-offs section, meter reading photos card,
     │                                  partial payment recording (RecordPaymentForm),
     │                                  "Partially paid" badge, outstanding amount display
     ├── admin/NewInvoicePage.tsx     reading inputs use step=1; shows warning banner +
-    │                                  disables save when previous invoice has no payment record
+    │                                  disables save when previous invoice has no payment record;
+    │                                  meter photo picker (approved submissions, checkbox overlay,
+    │                                  brand-colour selected ring, type label overlay)
     ├── admin/SettingsPage.tsx       + PropertiesManager section
     ├── portal/PortalDashboardPage.tsx  full tenant profile card, docs section with downloads,
-    │                                    outstanding dues banner, partial-paid invoice badges
+    │                                    outstanding dues banner, partial-paid invoice badges;
+    │                                    Meter Readings card (upload buttons open rear camera via
+    │                                    capture="environment"; colour-coded status badges)
+    ├── portal/PortalInvoiceViewPage.tsx  + Meter Reading Photos section (blob-fetched thumbnails
+    │                                       via portalMeterPhotoUrl, with revokeObjectURL cleanup)
     └── portal/PortalLoginPage.tsx   distinguishes 403 (blocked) from 401 (wrong password)
 ```
 

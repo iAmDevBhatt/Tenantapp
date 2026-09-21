@@ -22,7 +22,7 @@ SQLite by default, WAL mode, at `DATABASE_URL` (default `sqlite:///./data/app.db
 | *(meter photos)* | Stored in `tenant_documents` with `doc_type="meter_reading"` and `invoice_id` set. Up to 3 per invoice. Reuses all existing file-serve/delete infrastructure. |
 | `properties` | Named properties (name + address). Parent of `property_flats`. |
 | `property_flats` | Named flats/units within a property (e.g. "2 BHK", "Shop 1"). Referenced by `tenants.flat_id`. |
-| `meter_submissions` | **Schema only, no router/UI in v1** — Phase 2 extension point for tenants uploading meter-reading photos. |
+| `meter_submissions` | Tenant-uploaded meter reading photos (staging/review queue). Columns: `id`, `tenant_id`, `photo_path`, `photo_type` (flat_meter\|water_meter\|property\|other), `original_filename`, `content_type`, `size_bytes`, `submitted_at`, `status` (pending\|approved\|applied\|rejected), `applied_to_invoice_id` (nullable FK → `invoices`), `notes`. Files stored at `UPLOADS_DIR/tenants/<tenant_id>/meter_submissions/<uuid><ext>`. When an approved submission is tagged to an invoice, `save_meter_submission_as_document()` creates a `TenantDocument` row and marks `status="applied"`. |
 | `settings` | Singleton row: owner name (UPI payee display name), default UPI ID, property photo, invoice due days. |
 
 ## 4. API Base URL / Auth
@@ -92,6 +92,12 @@ Legend: **A** = admin JWT required, **T** = tenant JWT required, **P** = public.
 | GET | `/api/portal/invoices/{id}` | T | 404 if not this tenant's invoice |
 | GET | `/api/portal/invoices/{id}/pdf` | T | same scoping + same renderer as admin |
 | GET | `/api/portal/invoices/{id}/qr.png` | T | same scoping |
+| POST | `/api/portal/meter-submissions` | T | multipart: `file` + `photo_type` (Form); validates type in `{flat_meter,water_meter,property}`; image-only MIME; 20 MB cap; rate-limited 20/min; returns `MeterSubmissionOut` |
+| GET | `/api/portal/meter-submissions` | T | list tenant's own submissions, newest first; returns `list[MeterSubmissionOut]` |
+| GET | `/api/portal/invoices/{invoice_id}/meter-photos/{photo_id}` | T | streams one meter photo attached to an owned invoice; `FileResponse` |
+| GET | `/api/tenants/{tenant_id}/meter-submissions?status=` | A | list submissions for a tenant; optional `status` filter; returns `list[MeterSubmissionOut]` |
+| GET | `/api/tenants/{tenant_id}/meter-submissions/{ms_id}/photo` | A | stream the raw uploaded file; `FileResponse` |
+| POST | `/api/tenants/{tenant_id}/meter-submissions/{ms_id}/review` | A | body: `{action: "approve"\|"reject", notes?: str}`; 409 if not `pending`; approve → `status="approved"`, reject → `status="rejected"` + notes; returns `MeterSubmissionOut` |
 
 ## 6. Computed Field Rules
 
@@ -112,7 +118,7 @@ netPayable = max(totalPayable − Σ(writeoff.amount), 0)
 ```
 Computed at serialization time, never stored on the invoice row. Exposed as `netPayable` on `InvoiceOut`.
 
-**Client can never set computed/rate fields.** `InvoiceCreate`/`InvoiceUpdate` declare ONLY `tenantId, invoiceDate, roomStart, roomEnd, waterStart, waterEnd, previousDues` as inputs — Pydantic drops anything else.
+**Client can never set computed/rate fields.** `InvoiceCreate` accepts `tenantId, invoiceDate, roomStart, roomEnd, waterStart, waterEnd, previousDues` plus `meterSubmissionIds: list[str] = []` (optional — IDs of approved submissions to tag). Pydantic drops anything else. `InvoiceUpdate` accepts only the meter readings and date (no submission IDs).
 
 **Invoices are immutable snapshots.** At creation, `room_rate, water_rate, water_divisor, monthly_rent, upi_id, payee_name, due_days` are copied from `Tenant`/`Settings` onto the `Invoice` row and never re-read live again. Editing the invoice (PUT) recomputes using the RATES ALREADY STORED ON THAT INVOICE, not the tenant's current rates. `total_payable` itself is also immutable — write-offs are stored separately in `invoice_writeoffs`.
 
@@ -137,6 +143,8 @@ Profile photos are stored alongside documents under `UPLOADS_DIR/tenants/{tenant
 Meter reading photos are stored as `tenant_documents` rows with `doc_type="meter_reading"` and `invoice_id` set to the owning invoice. They share the same storage path pattern and all existing file-serve/delete infrastructure. Up to 3 per invoice (enforced in `routers/invoices.py`). `InvoiceOut.meterPhotos` carries them as a `list[DocumentOut]`, populated by querying `TenantDocument` where `invoice_id == invoice.id` (not via an ORM eager load). In `pdf_service.py`, they are read as base64 data URIs and passed to the Jinja2 template as `meter_photo_data_uris`.
 
 `build_tenant_zip` (in `services/document_service.py`) returns an in-memory zip (`io.BytesIO`) of all tenant documents plus the profile photo (if present) — meter reading photos are included in the zip since they are regular `tenant_documents` rows.
+
+Tenant-submitted meter photos (before review/tagging) are stored separately at `UPLOADS_DIR/tenants/<tenant_id>/meter_submissions/<uuid><ext>`. These are `MeterSubmission` rows, not `TenantDocument` rows, and are NOT included in the tenant zip. Once approved and tagged to an invoice, `save_meter_submission_as_document()` creates a `TenantDocument` row pointing to the same file path — from that point it is included in the zip and served via the standard document infrastructure. Key service helpers: `save_meter_submission_file(tenant_id, upload)` → writes file, returns `(rel_path, original_filename)`; `meter_submission_absolute_path(ms)` → full filesystem path; `save_meter_submission_as_document(db, ms, invoice_id)` → creates `TenantDocument`, marks submission `applied`.
 
 ## 8. Properties & Flats
 

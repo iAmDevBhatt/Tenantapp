@@ -19,6 +19,7 @@ A self-hosted web app that replaces a landlord's Google Sheet workflow for gener
 - **Tenant portal access control** — landlord can block or unblock a tenant's portal access at any time from the Invite tab. Portal access is automatically blocked when a tenant is marked as moved out.
 - **Document visibility** — per-document toggle lets the landlord decide which uploaded files are visible to the tenant in their portal. Default is hidden.
 - **Rental Agreement document type** — added alongside Lease Agreement, ID Proof, Move-in Photo, and Other.
+- **Tenant meter photo submission** — tenants photograph their meter each month and upload it (flat meter, water meter, whole property) directly from the portal on their phone (rear camera opens automatically). Landlord reviews pending submissions (approve/reject) from the Tenant Detail page. Approved photos appear inline in the New Invoice form; selecting them tags the photos to the invoice. Once tagged, a photo no longer appears as an option for future invoices. Tagged photos are visible to the tenant on their invoice view page.
 
 ## Tech stack
 
@@ -97,6 +98,6 @@ Restore with `./scripts/restore.sh <path-to-backup.tar.gz>` (stop the app first)
 - [`AI_SETUP.md`](./AI_SETUP.md) — literal install runbook.
 - [`AGENTS.md`](./AGENTS.md) — terse conventions/gotchas for a coding agent.
 
-## Roadmap (not built yet)
+## Roadmap
 
-Tenant meter-reading submission: tenants photograph their meter each month and upload it via the portal; the landlord reviews and applies it to the next invoice instead of retyping readings. The `meter_submissions` table exists in the schema as an extension point, but no router/UI is wired up yet (the landlord can already attach meter photos manually to an invoice — this roadmap item is for tenant-initiated submission).
+*(No outstanding roadmap items — tenant meter photo submission has been built. See Features above.)*
