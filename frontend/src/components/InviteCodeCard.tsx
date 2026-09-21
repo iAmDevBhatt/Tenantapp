@@ -3,6 +3,7 @@ import { invitesApi } from '@/api/invites'
 import { tenantsApi } from '@/api/tenants'
 import { InviteStatus, Tenant } from '@/types/tenant'
 import { useLabels } from '@/hooks/useLabels'
+import { useAppConfig } from '@/hooks/useAppConfig'
 
 interface Props {
   tenantId: string
@@ -16,6 +17,7 @@ export default function InviteCodeCard({ tenantId, tenant, onTenantUpdated }: Pr
   const [copied, setCopied] = useState(false)
   const [blocking, setBlocking] = useState(false)
   const { l } = useLabels()
+  const { appOrigin } = useAppConfig()
 
   async function load() {
     setLoading(true)
@@ -32,7 +34,7 @@ export default function InviteCodeCard({ tenantId, tenant, onTenantUpdated }: Pr
   }, [tenantId])
 
   function registerUrl(code: string) {
-    return `${window.location.origin}/portal/register?code=${code}`
+    return `${appOrigin()}/portal/register?code=${code}`
   }
 
   async function handleGenerate() {

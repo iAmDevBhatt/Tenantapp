@@ -46,6 +46,13 @@ def health():
     return {"status": "ok", "app": settings.APP_NAME}
 
 
+@app.get("/api/config")
+def public_config():
+    """Returns runtime config the frontend needs before auth. appUrl is None
+    when APP_URL is not set -- frontend falls back to window.location.origin."""
+    return {"appUrl": settings.APP_URL or None}
+
+
 # Docker mode: serve the built SPA. Toggled by SERVE_STATIC=true. Must be
 # mounted/registered after all API routers so the catch-all doesn't shadow
 # /api/*.

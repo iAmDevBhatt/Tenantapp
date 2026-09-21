@@ -26,6 +26,7 @@ See `README.md` → Quick start / Local development, or `AI_SETUP.md` for a lite
 | `JWT_EXPIRY_HOURS` | `336` (2 weeks) | Both admin and tenant tokens |
 | `ADMIN_USERNAME` / `ADMIN_PASSWORD` | *(none)* | Only used by `seed.py` to create the FIRST admin row if `admin_users` is empty; changing them afterward does nothing — use Settings → Change Password |
 | `TENANT_INVITE_EXPIRY_DAYS` | `14` | |
+| `APP_URL` | *(empty)* | Public-facing base URL (e.g. `https://rent.yourdomain.com`). Set this in Docker so tenant invite links use the real domain instead of relying on the browser's origin. Leave empty in dev. |
 | `CORS_ORIGINS` | `http://localhost:5173` | Comma-separated; tighten for a public-facing deploy |
 | `SERVE_STATIC` | `false` | `true` in Docker — serves `backend/frontend_dist` + SPA fallback |
 | `PORT` | `8000` | |

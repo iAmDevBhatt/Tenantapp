@@ -27,6 +27,12 @@ class Settings(BaseSettings):
 
     TENANT_INVITE_EXPIRY_DAYS: int = 14
 
+    # Optional: override the public-facing URL used in tenant invite links.
+    # Set this to your domain (e.g. https://rent.yourdomain.com) in Docker so
+    # invite links use the real URL instead of relying on the browser's origin.
+    # Leave empty in dev -- the frontend falls back to window.location.origin.
+    APP_URL: str = ""
+
     CORS_ORIGINS: str = "http://localhost:5173"
 
     def cors_origins_list(self) -> list[str]:
