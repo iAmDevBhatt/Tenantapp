@@ -12,6 +12,14 @@ export interface PortalMe {
   active: boolean
   moveInDate: string
   moveOutDate: string | null
+  phone: string | null
+  monthlyRent: string
+  roomRate: string
+  waterRate: string
+  hasProfilePhoto: boolean
+  permanentAddress: string | null
+  emergencyContactName: string | null
+  emergencyContactPhone: string | null
 }
 
 export interface Overview {

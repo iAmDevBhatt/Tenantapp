@@ -13,6 +13,7 @@ export interface Tenant {
   moveOutDate: string | null
   hasPortalAccount: boolean
   hasProfilePhoto: boolean
+  portalAccessBlocked: boolean
   flatId: string | null
   permanentAddress: string | null
   emergencyContactName: string | null
@@ -49,6 +50,7 @@ export interface TenantDocument {
   contentType: string | null
   sizeBytes: number | null
   docType: string
+  tenantVisible: boolean
   invoiceId: string | null
   uploadedAt: string
 }

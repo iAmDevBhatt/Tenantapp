@@ -1,6 +1,7 @@
 import { adminClient } from './adminClient'
 import { TenantDocument } from '@/types/tenant'
 
+
 export const documentsApi = {
   list: (tenantId: string) =>
     adminClient.get<TenantDocument[]>(`/tenants/${tenantId}/documents`).then((r) => r.data),
@@ -15,6 +16,9 @@ export const documentsApi = {
       })
       .then((r) => r.data)
   },
+
+  toggleVisibility: (tenantId: string, documentId: string) =>
+    adminClient.patch<TenantDocument>(`/tenants/${tenantId}/documents/${documentId}/visibility`).then((r) => r.data),
 
   delete: (tenantId: string, documentId: string) =>
     adminClient.delete(`/tenants/${tenantId}/documents/${documentId}`),

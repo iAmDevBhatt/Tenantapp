@@ -22,6 +22,7 @@ def _tenant_out(t) -> TenantOut:
         moveInDate=t.move_in_date, moveOutDate=t.move_out_date,
         hasPortalAccount=t.tenant_user is not None,
         hasProfilePhoto=bool(t.profile_photo_path),
+        portalAccessBlocked=bool(t.tenant_user and t.tenant_user.portal_access_blocked),
         flatId=t.flat_id,
         permanentAddress=t.permanent_address,
         emergencyContactName=t.emergency_contact_name,
@@ -96,6 +97,7 @@ def _doc_out(d) -> DocumentOut:
     return DocumentOut(
         id=d.id, tenantId=d.tenant_id, originalFilename=d.original_filename,
         contentType=d.content_type, sizeBytes=d.size_bytes, docType=d.doc_type,
+        tenantVisible=bool(d.tenant_visible),
         invoiceId=d.invoice_id,
         uploadedAt=d.uploaded_at,
     )
@@ -126,6 +128,15 @@ def download_document(tenant_id: str, document_id: str, db: Session = Depends(ge
         filename=doc.original_filename,
         media_type=doc.content_type or "application/octet-stream",
     )
+
+
+@router.patch("/{tenant_id}/documents/{document_id}/visibility", response_model=DocumentOut)
+def toggle_document_visibility(tenant_id: str, document_id: str, db: Session = Depends(get_db)):
+    doc = document_service.get_or_404(db, tenant_id, document_id)
+    doc.tenant_visible = not doc.tenant_visible
+    db.commit()
+    db.refresh(doc)
+    return _doc_out(doc)
 
 
 @router.delete("/{tenant_id}/documents/{document_id}")
@@ -172,6 +183,20 @@ def get_profile_photo(tenant_id: str, db: Session = Depends(get_db)):
 def delete_profile_photo(tenant_id: str, db: Session = Depends(get_db)):
     tenant = tenant_service.get_or_404(db, tenant_id)
     tenant = document_service.delete_profile_photo(db, tenant)
+    return _tenant_out(tenant)
+
+
+# --- Portal access block ---
+
+@router.patch("/{tenant_id}/portal-block", response_model=TenantOut)
+def toggle_portal_block(tenant_id: str, db: Session = Depends(get_db)):
+    tenant = tenant_service.get_or_404(db, tenant_id)
+    if not tenant.tenant_user:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=400, detail="This tenant has no portal account.")
+    tenant.tenant_user.portal_access_blocked = not tenant.tenant_user.portal_access_blocked
+    db.commit()
+    db.refresh(tenant)
     return _tenant_out(tenant)
 
 

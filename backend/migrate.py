@@ -43,6 +43,12 @@ def run_migrations() -> None:
         _add_column_if_missing(conn, "tenants", "emergency_contact_phone", "TEXT")
         # R5: link tenant_documents to an invoice (for meter reading photos)
         _add_column_if_missing(conn, "tenant_documents", "invoice_id", "TEXT")
+        # R6: partial payment tracking
+        _add_column_if_missing(conn, "invoices", "amount_paid", "NUMERIC(10,2)")
+        # R7: landlord controls which documents are visible to the tenant
+        _add_column_if_missing(conn, "tenant_documents", "tenant_visible", "INTEGER NOT NULL DEFAULT 0")
+        # R8: landlord can block portal access temporarily (or on move-out)
+        _add_column_if_missing(conn, "tenant_users", "portal_access_blocked", "INTEGER NOT NULL DEFAULT 0")
 
 
 if __name__ == "__main__":

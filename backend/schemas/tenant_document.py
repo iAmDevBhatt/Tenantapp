@@ -10,6 +10,7 @@ class DocumentOut(BaseModel):
     contentType: str | None
     sizeBytes: int | None
     docType: str
+    tenantVisible: bool = False
     invoiceId: str | None = None
     uploadedAt: datetime
 

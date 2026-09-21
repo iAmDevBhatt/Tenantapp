@@ -21,8 +21,13 @@ export default function PortalLoginPage() {
     try {
       await login(username, password)
       navigate('/portal')
-    } catch {
-      setError(l('error.invalidCredentials', 'Invalid username or password'))
+    } catch (err: unknown) {
+      const status = (err as { response?: { status?: number } })?.response?.status
+      if (status === 403) {
+        setError(l('error.portalBlocked', 'Portal access has been suspended. Contact your landlord.'))
+      } else {
+        setError(l('error.invalidCredentials', 'Invalid username or password'))
+      }
     } finally {
       setLoading(false)
     }

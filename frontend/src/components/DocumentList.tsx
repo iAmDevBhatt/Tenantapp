@@ -22,6 +22,7 @@ export default function DocumentList({ tenantId }: { tenantId: string }) {
 
   const DOC_TYPES = [
     { value: 'lease', label: l('document.type.lease', 'Lease agreement') },
+    { value: 'rental_agreement', label: l('document.type.rentalAgreement', 'Rental agreement') },
     { value: 'id_proof', label: l('document.type.idProof', 'ID proof') },
     { value: 'photo', label: l('document.type.photo', 'Move-in photo') },
     { value: 'other', label: l('document.type.other', 'Other') },
@@ -60,6 +61,11 @@ export default function DocumentList({ tenantId }: { tenantId: string }) {
     URL.revokeObjectURL(url)
   }
 
+  async function handleToggleVisibility(doc: TenantDocument) {
+    const updated = await documentsApi.toggleVisibility(tenantId, doc.id)
+    setDocs((prev) => prev.map((d) => (d.id === updated.id ? updated : d)))
+  }
+
   async function handleDelete(doc: TenantDocument) {
     if (!confirm(`Delete "${doc.originalFilename}"?`)) return
     await documentsApi.delete(tenantId, doc.id)
@@ -93,8 +99,18 @@ export default function DocumentList({ tenantId }: { tenantId: string }) {
                 <p className="text-xs text-slate-500">
                   {DOC_TYPES.find((t) => t.value === doc.docType)?.label ?? doc.docType} · {formatSize(doc.sizeBytes)}
                 </p>
+                <span className={`text-xs rounded-full px-2 py-0.5 mt-0.5 inline-block ${doc.tenantVisible ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-500'}`}>
+                  {doc.tenantVisible ? l('document.visibility.visible', 'Visible to tenant') : l('document.visibility.hidden', 'Hidden from tenant')}
+                </span>
               </div>
               <div className="flex gap-2 flex-shrink-0">
+                <button
+                  className={`btn-compact ${doc.tenantVisible ? 'btn-secondary' : 'btn-primary'}`}
+                  onClick={() => handleToggleVisibility(doc)}
+                  title={doc.tenantVisible ? l('document.visibility.hideTooltip', 'Click to hide from tenant') : l('document.visibility.showTooltip', 'Click to make visible to tenant')}
+                >
+                  {doc.tenantVisible ? l('btn.hideFromTenant', 'Hide') : l('btn.shareWithTenant', 'Share')}
+                </button>
                 <button className="btn-secondary btn-compact" onClick={() => handleDownload(doc)}>{l('btn.download', 'Download')}</button>
                 <button className="btn-danger btn-compact" onClick={() => handleDelete(doc)}>{l('btn.delete', 'Delete')}</button>
               </div>

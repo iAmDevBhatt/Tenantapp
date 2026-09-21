@@ -1,4 +1,5 @@
 from datetime import date
+from decimal import Decimal
 
 from pydantic import BaseModel
 
@@ -10,3 +11,11 @@ class PortalMeOut(BaseModel):
     active: bool
     moveInDate: date
     moveOutDate: date | None
+    phone: str | None
+    monthlyRent: Decimal
+    roomRate: Decimal
+    waterRate: Decimal
+    hasProfilePhoto: bool
+    permanentAddress: str | None
+    emergencyContactName: str | None
+    emergencyContactPhone: str | None

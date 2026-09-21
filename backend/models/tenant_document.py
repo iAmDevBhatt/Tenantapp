@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import Column, String, Integer, ForeignKey, DateTime
+from sqlalchemy import Boolean, Column, String, Integer, ForeignKey, DateTime
 from sqlalchemy.orm import relationship
 
 from backend.database import Base
@@ -17,7 +17,8 @@ class TenantDocument(Base):
     file_path = Column(String, nullable=False)          # path relative to UPLOADS_DIR
     content_type = Column(String, nullable=True)
     size_bytes = Column(Integer, nullable=True)
-    doc_type = Column(String, nullable=False, default="other")  # lease | id_proof | photo | meter_reading | other
+    doc_type = Column(String, nullable=False, default="other")  # lease | rental_agreement | id_proof | photo | meter_reading | other
+    tenant_visible = Column(Boolean, nullable=False, default=False)
     invoice_id = Column(String(36), ForeignKey("invoices.id"), nullable=True, index=True)
     uploaded_at = Column(DateTime, default=datetime.utcnow)
 

@@ -48,15 +48,18 @@ backend/
 │   │                        emergency_contact_name, emergency_contact_phone
 │   ├── invoice.py         + writeoffs relationship, meter_photos viewonly relationship
 │   ├── invoice_writeoff.py  write-off child table
-│   ├── tenant_document.py   + invoice_id (nullable FK → invoices), doc_type="meter_reading"
+│   ├── tenant_document.py   + invoice_id (nullable FK → invoices), doc_type="meter_reading",
+│   │                          tenant_visible (bool, default False)
+│   ├── tenant_user.py         + portal_access_blocked (bool, default False)
 │   ├── property.py          Property + PropertyFlat models
 │   └── ...
 ├── schemas/             Pydantic request/response models
 │   ├── tenant.py          TenantOut includes hasProfilePhoto, flatId,
 │   │                        permanentAddress, emergencyContactName, emergencyContactPhone
-│   ├── invoice.py         InvoiceOut includes writeOffs[], netPayable, meterPhotos[]
+│   ├── invoice.py         InvoiceOut includes writeOffs[], netPayable, meterPhotos[],
+│   │                        amountPaid (nullable), outstanding (computed)
 │   ├── invoice_writeoff.py  WriteOffCreate, WriteOffOut
-│   ├── tenant_document.py   DocumentOut includes invoiceId
+│   ├── tenant_document.py   DocumentOut includes invoiceId, tenantVisible
 │   └── property.py        PropertyOut, FlatOut, create/update variants
 ├── routers/             thin FastAPI handlers
 │   ├── tenants.py         + profile-photo CRUD, download-all (zip)
@@ -81,14 +84,16 @@ frontend/src/
 ├── api/
 │   ├── adminClient.ts / portalClient.ts   separate axios instances, separate localStorage keys
 │   ├── tenants.ts       + uploadProfilePhoto, deleteProfilePhoto, profilePhotoUrl,
-│   │                      downloadAllDocsUrl
+│   │                      downloadAllDocsUrl, togglePortalBlock
 │   ├── invoices.ts      + addWriteOff, deleteWriteOff, uploadMeterPhoto, deleteMeterPhoto,
-│   │                      meterPhotoDownloadUrl
+│   │                      meterPhotoDownloadUrl, recordPayment
+│   ├── documents.ts     + toggleVisibility
 │   └── properties.ts    full CRUD for properties + flats
 ├── types/
-│   ├── tenant.ts        + hasProfilePhoto, flatId, permanentAddress,
+│   ├── tenant.ts        + hasProfilePhoto, portalAccessBlocked, flatId, permanentAddress,
 │   │                      emergencyContactName, emergencyContactPhone
-│   ├── invoice.ts       + WriteOff, writeOffs[], netPayable, MeterPhoto, meterPhotos[]
+│   ├── invoice.ts       + WriteOff, writeOffs[], netPayable, MeterPhoto, meterPhotos[],
+│   │                      amountPaid (string|null), outstanding (string)
 │   └── property.ts      Property, PropertyFlat, create/input interfaces
 ├── hooks/
 │   ├── useLabels.ts     loads /labels.properties once (module-level cache); l(key, fallback)
@@ -101,17 +106,23 @@ frontend/src/
 │   ├── TenantForm.tsx     + Property→Flat dropdowns, permanentAddress textarea,
 │   │                        emergencyContactName + emergencyContactPhone fields
 │   ├── PropertiesManager.tsx  full CRUD UI embedded in Settings page
-│   ├── DocumentList.tsx
+│   ├── DocumentList.tsx   + rental_agreement doc type, tenant_visible badge + toggle
+│   ├── InviteCodeCard.tsx  + Block/Unblock access button when tenant has portal account
 │   └── invoice/InvoiceDocument.tsx + invoice-print.css
 │                            Opening/Closing Reading headers; meter values as integers
 └── pages/
     ├── admin/DashboardPage.tsx      tenant cards include TenantAvatar
     ├── admin/TenantDetailPage.tsx   + profile photo, download-all, permanentAddress,
     │                                  emergencyContact fields in profile view
-    ├── admin/InvoiceDetailPage.tsx  + write-offs section, meter reading photos card
-    │                                  (upload/delete/thumbnail, max 3 per invoice)
-    ├── admin/NewInvoicePage.tsx     reading inputs use step=1 (whole numbers only)
-    └── admin/SettingsPage.tsx       + PropertiesManager section
+    ├── admin/InvoiceDetailPage.tsx  + write-offs section, meter reading photos card,
+    │                                  partial payment recording (RecordPaymentForm),
+    │                                  "Partially paid" badge, outstanding amount display
+    ├── admin/NewInvoicePage.tsx     reading inputs use step=1; shows warning banner +
+    │                                  disables save when previous invoice has no payment record
+    ├── admin/SettingsPage.tsx       + PropertiesManager section
+    ├── portal/PortalDashboardPage.tsx  full tenant profile card, docs section with downloads,
+    │                                    outstanding dues banner, partial-paid invoice badges
+    └── portal/PortalLoginPage.tsx   distinguishes 403 (blocked) from 401 (wrong password)
 ```
 
 ## UI String Externalisation

@@ -14,10 +14,10 @@ SQLite by default, WAL mode, at `DATABASE_URL` (default `sqlite:///./data/app.db
 |---|---|
 | `admin_users` | The landlord's login (usually exactly one row). Seeded from `ADMIN_USERNAME`/`ADMIN_PASSWORD` env vars if empty. |
 | `tenants` | Tenant records: rates, rent, UPI, active/inactive (moved-out), move-in/out dates, `profile_photo_path` (nullable), `flat_id` FK → `property_flats`, `permanent_address` (nullable TEXT), `emergency_contact_name` (nullable), `emergency_contact_phone` (nullable). |
-| `tenant_documents` | Uploaded files (lease/id_proof/photo/meter_reading/other) against a tenant, stored under `UPLOADS_DIR/tenants/<tenant_id>/`. `invoice_id` (nullable FK → `invoices`) is set for `doc_type="meter_reading"` docs — links them to a specific invoice. |
-| `tenant_users` | A tenant's portal login (1:1 with `tenants`, created at self-registration). |
+| `tenant_documents` | Uploaded files (lease/id_proof/rental_agreement/photo/meter_reading/other) against a tenant, stored under `UPLOADS_DIR/tenants/<tenant_id>/`. `invoice_id` (nullable FK → `invoices`) is set for `doc_type="meter_reading"` docs. `tenant_visible` (boolean, default `False`) controls whether the landlord has shared the file with the tenant portal. |
+| `tenant_users` | A tenant's portal login (1:1 with `tenants`, created at self-registration). `portal_access_blocked` (boolean, default `False`) — when `True`, login and all portal API calls return 403. Auto-set to `True` when the tenant is deactivated (moved out). |
 | `tenant_invites` | One-time invite codes a landlord generates per tenant so they can self-register a portal login. |
-| `invoices` | Immutable invoice snapshots — see §6. |
+| `invoices` | Immutable invoice snapshots — see §6. `amount_paid` (nullable Decimal) records how much the tenant actually paid; `NULL` = no payment recorded yet. |
 | `invoice_writeoffs` | Write-off entries against an invoice. `total_payable` on the invoice never changes; net payable is computed as `total_payable − Σ write_offs`. |
 | *(meter photos)* | Stored in `tenant_documents` with `doc_type="meter_reading"` and `invoice_id` set. Up to 3 per invoice. Reuses all existing file-serve/delete infrastructure. |
 | `properties` | Named properties (name + address). Parent of `property_flats`. |
@@ -61,10 +61,12 @@ Legend: **A** = admin JWT required, **T** = tenant JWT required, **P** = public.
 | GET/POST | `/api/tenants/{id}/documents` | A | list / multipart upload |
 | GET | `/api/tenants/{id}/documents/{doc_id}/download` | A | streams file |
 | DELETE | `/api/tenants/{id}/documents/{doc_id}` | A | removes row + file |
+| PATCH | `/api/tenants/{id}/documents/{doc_id}/visibility` | A | toggle `tenant_visible`; controls what tenant sees in their portal |
 | GET | `/api/tenants/{id}/documents/download-all` | A | streams a zip of all docs + profile photo (registered BEFORE `/{doc_id}/download` in the router) |
 | POST | `/api/tenants/{id}/profile-photo` | A | multipart upload; replaces existing |
 | GET | `/api/tenants/{id}/profile-photo` | A | streams the profile photo |
 | DELETE | `/api/tenants/{id}/profile-photo` | A | removes file + clears column |
+| PATCH | `/api/tenants/{id}/portal-block` | A | toggle `portal_access_blocked` on `TenantUser`; 400 if no portal account |
 | GET/POST/DELETE | `/api/tenants/{id}/invite` | A | get / generate (regenerate replaces) / revoke |
 | GET | `/api/properties` | A | list all properties with their flats |
 | POST | `/api/properties` | A | create property |
@@ -79,9 +81,13 @@ Legend: **A** = admin JWT required, **T** = tenant JWT required, **P** = public.
 | GET | `/api/invoices/{id}/qr.png` | A | `image/png` |
 | POST | `/api/invoices/{id}/writeoffs` | A | `{amount, reason}` — amount must be > 0 and ≤ netPayable; only on unpaid invoices |
 | DELETE | `/api/invoices/{id}/writeoffs/{wid}` | A | undo a write-off |
+| PATCH | `/api/invoices/{id}/payment` | A | `{amountPaid}` — record partial/full payment received; 0 ≤ amount ≤ netPayable |
 | POST | `/api/invoices/{id}/photos` | A | multipart upload — max 3 per invoice; saves as `doc_type="meter_reading"` with `invoice_id` set |
 | DELETE | `/api/invoices/{id}/photos/{photo_id}` | A | delete a meter reading photo |
-| GET | `/api/portal/me` | T | own tenant profile |
+| GET | `/api/portal/me` | T | own tenant profile (name, address, rates, contact, photo flag) |
+| GET | `/api/portal/me/photo` | T | streams the tenant's own profile photo |
+| GET | `/api/portal/me/documents` | T | lists documents where `tenant_visible=True` and `doc_type != "meter_reading"` |
+| GET | `/api/portal/me/documents/{doc_id}/download` | T | download a shared document; 404 if not tenant's or not visible |
 | GET | `/api/portal/invoices` | T | own invoices only |
 | GET | `/api/portal/invoices/{id}` | T | 404 if not this tenant's invoice |
 | GET | `/api/portal/invoices/{id}/pdf` | T | same scoping + same renderer as admin |
@@ -110,9 +116,19 @@ Computed at serialization time, never stored on the invoice row. Exposed as `net
 
 **Invoices are immutable snapshots.** At creation, `room_rate, water_rate, water_divisor, monthly_rent, upi_id, payee_name, due_days` are copied from `Tenant`/`Settings` onto the `Invoice` row and never re-read live again. Editing the invoice (PUT) recomputes using the RATES ALREADY STORED ON THAT INVOICE, not the tenant's current rates. `total_payable` itself is also immutable — write-offs are stored separately in `invoice_writeoffs`.
 
+**Partial payment** (`PATCH /api/invoices/{id}/payment`, `invoice_service.record_payment`):
+- `amount_paid` (nullable `Numeric(10,2)`) records total received so far. `NULL` = no payment recorded.
+- `outstanding = max(netPayable − amount_paid, 0)`. Exposed as `outstanding` on `InvoiceOut`.
+- If `paid=True` then `outstanding` is always `0`, regardless of `amount_paid`.
+
+**Invoice creation gate** (`invoice_service.check_can_create_invoice`):
+- Before creating a new invoice, the backend checks the most recent invoice for the tenant.
+- If that invoice has none of: `paid=True`, `amount_paid IS NOT NULL`, or any write-offs → raises `422`.
+- This ensures there is always a payment record before the next month's invoice is started.
+
 **Auto-fill logic** (`GET /tenants/{id}/next-invoice-defaults`, `services/invoice_service.py::next_invoice_defaults`):
 - `roomStart`/`waterStart` = the tenant's most recent invoice's `roomEnd`/`waterEnd` (0 if no invoices yet).
-- `previousDues` = `max(total_payable − Σ write_offs, 0)` if the last invoice is unpaid, else `0`.
+- `previousDues` = `outstanding(last)` if the last invoice is unpaid, else `0`. `outstanding` uses `amount_paid` if set, else `netPayable`.
 
 ## 7. Profile Photos, Meter Photos & File Storage
 

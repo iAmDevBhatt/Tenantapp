@@ -3,7 +3,7 @@ tenant.tenant_id (from the verified JWT), never a client-supplied id -- so a
 tenant can never reach another tenant's data even by guessing an invoice id
 (returns 404, not 403, to avoid confirming the id exists at all)."""
 from fastapi import APIRouter, Depends, HTTPException
-from fastapi.responses import Response
+from fastapi.responses import FileResponse, Response
 from sqlalchemy.orm import Session
 
 from backend.core.deps import get_current_tenant
@@ -14,7 +14,7 @@ from backend.schemas.invoice import InvoiceOut
 from backend.schemas.invoice_writeoff import WriteOffOut
 from backend.schemas.tenant_document import DocumentOut
 from backend.models.tenant_document import TenantDocument
-from backend.services import invoice_service, settings_service, qr_service, tenant_service
+from backend.services import document_service, invoice_service, settings_service, qr_service, tenant_service
 from backend.services.pdf_service import render_invoice_pdf, PdfUnavailableError, build_invoice_view
 
 router = APIRouter(prefix="/api/portal", tags=["portal"], dependencies=[Depends(get_current_tenant)])
@@ -24,6 +24,7 @@ def _doc_out(d) -> DocumentOut:
     return DocumentOut(
         id=d.id, tenantId=d.tenant_id, originalFilename=d.original_filename,
         contentType=d.content_type, sizeBytes=d.size_bytes, docType=d.doc_type,
+        tenantVisible=bool(d.tenant_visible),
         invoiceId=d.invoice_id, uploadedAt=d.uploaded_at,
     )
 
@@ -71,7 +72,50 @@ def me(tenant_user: TenantUser = Depends(get_current_tenant), db: Session = Depe
     return PortalMeOut(
         tenantId=tenant.id, name=tenant.name, propertyAddress=tenant.property_address,
         active=tenant.active, moveInDate=tenant.move_in_date, moveOutDate=tenant.move_out_date,
+        phone=tenant.phone, monthlyRent=tenant.monthly_rent,
+        roomRate=tenant.room_rate, waterRate=tenant.water_rate,
+        hasProfilePhoto=bool(tenant.profile_photo_path),
+        permanentAddress=tenant.permanent_address,
+        emergencyContactName=tenant.emergency_contact_name,
+        emergencyContactPhone=tenant.emergency_contact_phone,
     )
+
+
+@router.get("/me/photo")
+def my_profile_photo(tenant_user: TenantUser = Depends(get_current_tenant), db: Session = Depends(get_db)):
+    tenant = tenant_service.get_or_404(db, tenant_user.tenant_id)
+    path = document_service.profile_photo_absolute_path(tenant)
+    if not path:
+        raise HTTPException(status_code=404, detail="No profile photo")
+    import mimetypes
+    mime = mimetypes.guess_type(path)[0] or "image/jpeg"
+    return FileResponse(path, media_type=mime)
+
+
+@router.get("/me/documents", response_model=list[DocumentOut])
+def my_documents(tenant_user: TenantUser = Depends(get_current_tenant), db: Session = Depends(get_db)):
+    docs = db.query(TenantDocument).filter(
+        TenantDocument.tenant_id == tenant_user.tenant_id,
+        TenantDocument.doc_type != "meter_reading",
+        TenantDocument.tenant_visible == True,
+    ).order_by(TenantDocument.uploaded_at).all()
+    return [_doc_out(d) for d in docs]
+
+
+@router.get("/me/documents/{doc_id}/download")
+def download_my_document(doc_id: str, tenant_user: TenantUser = Depends(get_current_tenant), db: Session = Depends(get_db)):
+    doc = db.query(TenantDocument).filter(
+        TenantDocument.id == doc_id,
+        TenantDocument.tenant_id == tenant_user.tenant_id,
+    ).first()
+    if not doc:
+        raise HTTPException(status_code=404, detail="Document not found")
+    path = document_service.absolute_path(doc)
+    if not path:
+        raise HTTPException(status_code=404, detail="File not found on disk")
+    import mimetypes
+    mime = doc.content_type or mimetypes.guess_type(doc.original_filename)[0] or "application/octet-stream"
+    return FileResponse(path, media_type=mime, filename=doc.original_filename)
 
 
 @router.get("/invoices", response_model=list[InvoiceOut])

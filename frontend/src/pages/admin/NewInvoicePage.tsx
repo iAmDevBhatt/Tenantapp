@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom'
 import { tenantsApi } from '@/api/tenants'
 import { invoicesApi } from '@/api/invoices'
 import { Tenant } from '@/types/tenant'
+import { Invoice } from '@/types/invoice'
 import { computeInvoicePreview, formatINR } from '@/utils/formulas'
 import { useLabels } from '@/hooks/useLabels'
 
@@ -10,6 +11,7 @@ export default function NewInvoicePage() {
   const { tenantId } = useParams<{ tenantId: string }>()
   const navigate = useNavigate()
   const [tenant, setTenant] = useState<Tenant | null>(null)
+  const [blockingInvoice, setBlockingInvoice] = useState<Invoice | null>(null)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -25,12 +27,23 @@ export default function NewInvoicePage() {
   useEffect(() => {
     if (!tenantId) return
     setLoading(true)
-    Promise.all([tenantsApi.get(tenantId), tenantsApi.nextInvoiceDefaults(tenantId)])
-      .then(([t, defaults]) => {
+    Promise.all([
+      tenantsApi.get(tenantId),
+      tenantsApi.nextInvoiceDefaults(tenantId),
+      invoicesApi.listForTenant(tenantId),
+    ])
+      .then(([t, defaults, invoices]) => {
         setTenant(t)
         setRoomStart(defaults.roomStart)
         setWaterStart(defaults.waterStart)
         setPreviousDues(defaults.previousDues)
+
+        // Detect if the most recent invoice blocks creation (no payment, not paid, no write-offs)
+        if (invoices.length > 0) {
+          const last = invoices[0]
+          const isBlocked = !last.paid && last.amountPaid === null && last.writeOffs.length === 0
+          setBlockingInvoice(isBlocked ? last : null)
+        }
       })
       .finally(() => setLoading(false))
   }, [tenantId])
@@ -59,7 +72,8 @@ export default function NewInvoicePage() {
       })
       navigate(`/invoices/${invoice.id}`)
     } catch (err: any) {
-      setError(err?.response?.data?.detail || l('error.saveInvoice', 'Could not save invoice'))
+      const detail = err?.response?.data?.detail || l('error.saveInvoice', 'Could not save invoice')
+      setError(detail)
     } finally {
       setSaving(false)
     }
@@ -71,6 +85,18 @@ export default function NewInvoicePage() {
     <div className="space-y-4">
       <Link to={`/tenants/${tenant.id}`} className="text-sm text-brand-600 hover:underline">&larr; {tenant.name}</Link>
       <h1 className="text-xl font-bold">{tenant.name}</h1>
+
+      {blockingInvoice && (
+        <div className="rounded-lg bg-amber-50 border border-amber-200 text-amber-800 px-4 py-3 text-sm space-y-1">
+          <p className="font-semibold">{l('newInvoice.blocked.title', 'Previous invoice needs a payment record')}</p>
+          <p>
+            {l('newInvoice.blocked.body', 'Record how much was received on the previous invoice before creating a new one.')}{' '}
+            <Link to={`/invoices/${blockingInvoice.id}`} className="underline font-medium">
+              {l('newInvoice.blocked.link', 'Go to previous invoice →')}
+            </Link>
+          </p>
+        </div>
+      )}
 
       {error && <div className="rounded-lg bg-red-50 text-red-700 px-3 py-2 text-sm">{error}</div>}
 
@@ -105,7 +131,12 @@ export default function NewInvoicePage() {
             <input className="field-input" type="number" step="0.01" value={previousDues} onChange={(e) => setPreviousDues(e.target.value)} />
           </div>
 
-          <button className="btn-primary w-full" onClick={handleSave} disabled={saving || !roomEnd || !waterEnd}>
+          <button
+            className="btn-primary w-full"
+            onClick={handleSave}
+            disabled={saving || !roomEnd || !waterEnd || !!blockingInvoice}
+            title={blockingInvoice ? l('newInvoice.blocked.btnTooltip', 'Record a payment on the previous invoice first') : undefined}
+          >
             {saving ? l('btn.saving', 'Saving…') : l('btn.saveInvoice', 'Save Invoice')}
           </button>
         </div>

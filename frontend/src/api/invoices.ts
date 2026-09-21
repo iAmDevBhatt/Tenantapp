@@ -16,6 +16,9 @@ export const invoicesApi = {
   togglePaid: (id: string, paid: boolean, paidDate?: string) =>
     adminClient.post<Invoice>(`/invoices/${id}/toggle-paid`, { paid, paidDate }).then((r) => r.data),
 
+  recordPayment: (id: string, amountPaid: number) =>
+    adminClient.patch<Invoice>(`/invoices/${id}/payment`, { amountPaid }).then((r) => r.data),
+
   delete: (id: string) => adminClient.delete(`/invoices/${id}`),
 
   addWriteOff: (invoiceId: string, data: WriteOffCreateInput) =>

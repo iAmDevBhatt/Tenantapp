@@ -224,7 +224,7 @@ export default function TenantDetailPage() {
 
       {tab === 'invite' && (
         <div className="card p-4 sm:p-6">
-          <InviteCodeCard tenantId={tenant.id} />
+          <InviteCodeCard tenantId={tenant.id} tenant={tenant} onTenantUpdated={setTenant} />
         </div>
       )}
     </div>

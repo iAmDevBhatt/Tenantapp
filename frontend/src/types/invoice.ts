@@ -50,9 +50,11 @@ export interface Invoice {
 
   paid: boolean
   paidDate: string | null
+  amountPaid: string | null
   createdAt: string
   writeOffs: WriteOff[]
   netPayable: string
+  outstanding: string
   meterPhotos: MeterPhoto[]
 }
 

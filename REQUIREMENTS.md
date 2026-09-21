@@ -9,7 +9,7 @@ CORE FEATURES
    - Add/edit tenants: name, property address, monthly rent, room-meter rate (₹/unit), water-meter rate (₹/unit), a "water meter shared by N tenants" setting (usage is divided by N before billing — default N=1), UPI ID for payment, move-in date.
    - Optional extended profile fields per tenant: permanent address (textarea) and emergency/guardian contact name + phone. Displayed in the profile tab when populated.
    - Mark a tenant "moved out" (soft-delete / inactive) instead of deleting them, so their invoice history is preserved. Inactive tenants can be reactivated. New tenants can be added any time.
-   - Per-tenant documents: ability to upload and store files against a tenant record (lease agreement, ID proof, move-in photos, etc.) — list, download, delete. Stored durably (see PERSISTENCE below), not just referenced by a broken local path.
+   - Per-tenant documents: ability to upload and store files against a tenant record (lease agreement, rental agreement, ID proof, move-in photos, etc.) — list, download, delete. Stored durably (see PERSISTENCE below), not just referenced by a broken local path. Per-document visibility flag: landlord decides which documents are shared with the tenant in their portal (default hidden).
    - Per-tenant passport-size profile photo (DP): upload/replace/delete a circular avatar photo. Displayed on the dashboard tenant cards and the tenant detail page header.
    - Download all documents (zip): one-click download of all a tenant's uploaded documents plus their profile photo as a single zip file.
 
@@ -21,7 +21,8 @@ CORE FEATURES
 3. New invoice
    - Pick an active tenant. Enter this month's meter end-readings for a Room meter and a Water meter.
    - Start readings auto-fill from that tenant's last invoice's end readings (so the landlord only ever types the new end reading).
-   - "Previous dues" auto-fills from the net payable of the tenant's most recent unpaid invoice (total minus any write-offs already applied), else 0. Editable.
+   - "Previous dues" auto-fills from the outstanding balance of the tenant's most recent unpaid invoice (`net_payable − amount_paid`), else 0. Editable.
+   - A new invoice cannot be created unless the previous invoice has a payment record (full payment, partial amount, or at least one write-off). Enforced server-side (422) and surfaced as a warning banner + disabled save button in the UI.
    - Live-computed preview using these exact formulas:
      roomUsage = roomEnd - roomStart
      roomAmount = roomUsage * roomRate
@@ -34,6 +35,7 @@ CORE FEATURES
 4. Invoice history
    - Per tenant, list every past invoice (date, total, paid/unpaid status).
    - Toggle an invoice paid/unpaid (this drives the next invoice's auto-filled previous dues).
+   - Record a partial payment amount on an unpaid invoice; the outstanding balance carries forward to the next invoice's previous dues.
    - Re-open and re-download the PDF of ANY past invoice at any time, not just the most recent one — the styled document is regenerated from the saved invoice snapshot, so old invoices always render correctly even if the tenant's current rates changed since.
    - Delete an invoice if it was entered by mistake.
 

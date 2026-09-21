@@ -14,7 +14,11 @@ A self-hosted web app that replaces a landlord's Google Sheet workflow for gener
 - **Invoice PDF** — server-rendered (WeasyPrint), blue-and-white printable design matching the reference layout, with a dynamic UPI QR code (amount pre-filled). Utility table shows "Opening Reading" / "Closing Reading" columns; meter values display as whole numbers.
 - **Send via WhatsApp** — opens a prefilled `wa.me` chat with the tenant; the message uses the net payable when write-offs exist.
 - **Download all documents (zip)** — one-click zip of all a tenant's uploaded documents plus their profile photo.
-- **Tenant portal** — each tenant gets their own read-only login (self-registered via a landlord-issued invite link) to view and download their own invoice history.
+- **Partial payment tracking** — record how much a tenant paid on an invoice; the outstanding balance carries forward automatically as "Previous Dues" on the next invoice. A new invoice cannot be created until the previous one has at least a payment record, partial amount, or write-off.
+- **Tenant portal** — each tenant gets their own read-only login (self-registered via a landlord-issued invite link) to view invoices, download shared documents, and see their own profile.
+- **Tenant portal access control** — landlord can block or unblock a tenant's portal access at any time from the Invite tab. Portal access is automatically blocked when a tenant is marked as moved out.
+- **Document visibility** — per-document toggle lets the landlord decide which uploaded files are visible to the tenant in their portal. Default is hidden.
+- **Rental Agreement document type** — added alongside Lease Agreement, ID Proof, Move-in Photo, and Other.
 
 ## Tech stack
 

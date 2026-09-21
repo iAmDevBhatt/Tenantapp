@@ -24,4 +24,6 @@ def tenant_login(db: Session, username: str, password: str) -> str:
     tu = db.query(TenantUser).filter(TenantUser.username == username).first()
     if not tu or not verify_password(password, tu.password_hash):
         raise HTTPException(status_code=401, detail="Invalid username or password")
+    if tu.portal_access_blocked:
+        raise HTTPException(status_code=403, detail="Portal access has been suspended. Contact your landlord.")
     return create_access_token(subject=tu.id, role="tenant", extra_claims={"tenantId": tu.tenant_id})

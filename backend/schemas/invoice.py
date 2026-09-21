@@ -37,6 +37,10 @@ class TogglePaidRequest(BaseModel):
     paidDate: date | None = None
 
 
+class RecordPaymentRequest(BaseModel):
+    amountPaid: Decimal
+
+
 class InvoiceOut(BaseModel):
     id: str
     tenantId: str
@@ -64,9 +68,11 @@ class InvoiceOut(BaseModel):
 
     paid: bool
     paidDate: date | None
+    amountPaid: Decimal | None = None
     createdAt: datetime
     writeOffs: list[WriteOffOut] = []
     netPayable: Decimal = Decimal("0")
+    outstanding: Decimal = Decimal("0")
     meterPhotos: list[DocumentOut] = []
 
     model_config = {"from_attributes": True}

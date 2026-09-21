@@ -45,6 +45,7 @@ class Invoice(Base):
 
     paid = Column(Boolean, nullable=False, default=False)
     paid_date = Column(Date, nullable=True)
+    amount_paid = Column(Numeric(10, 2), nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 
     tenant = relationship("Tenant", back_populates="invoices")

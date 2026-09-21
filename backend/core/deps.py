@@ -38,4 +38,6 @@ def get_current_tenant(
     tu = db.get(TenantUser, payload["sub"])
     if not tu or tu.tenant_id != payload.get("tenantId"):
         raise HTTPException(status_code=401, detail="Not authenticated")
+    if tu.portal_access_blocked:
+        raise HTTPException(status_code=403, detail="Portal access has been suspended. Contact your landlord.")
     return tu

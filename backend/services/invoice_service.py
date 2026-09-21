@@ -63,10 +63,47 @@ def list_for_tenant(db: Session, tenant_id: str) -> list[Invoice]:
     )
 
 
+def net_payable(invoice: Invoice) -> Decimal:
+    total_written_off = sum(Decimal(str(wo.amount)) for wo in invoice.writeoffs)
+    return _q(Decimal(str(invoice.total_payable)) - total_written_off)
+
+
+def outstanding(invoice: Invoice) -> Decimal:
+    """Amount still owed: netPayable minus what has already been received.
+    Returns 0 if the invoice is fully paid."""
+    if invoice.paid:
+        return _q(Decimal("0"))
+    paid = _q(Decimal(str(invoice.amount_paid))) if invoice.amount_paid is not None else _q(Decimal("0"))
+    return _q(max(net_payable(invoice) - paid, Decimal("0")))
+
+
+def check_can_create_invoice(db: Session, tenant: Tenant) -> None:
+    """Raise 422 if the tenant's last invoice has no payment record at all.
+    Having paid=True, a recorded amount_paid, or any write-off satisfies the gate."""
+    last = (
+        db.query(Invoice)
+        .filter(Invoice.tenant_id == tenant.id)
+        .order_by(Invoice.invoice_date.desc(), Invoice.created_at.desc())
+        .first()
+    )
+    if not last:
+        return
+    if last.paid:
+        return
+    if last.amount_paid is not None:
+        return
+    if last.writeoffs:
+        return
+    raise HTTPException(
+        status_code=422,
+        detail="Previous invoice has no payment record. Please record a payment (even partial) or mark it paid before creating a new invoice.",
+    )
+
+
 def next_invoice_defaults(db: Session, tenant: Tenant) -> dict:
     """Start readings auto-fill from the tenant's last invoice end readings
-    (0 if this is their first ever invoice). Previous dues auto-fills from
-    the most recent invoice's total if that invoice is unpaid, else 0."""
+    (0 if this is their first ever invoice). Previous dues = outstanding balance
+    of the last invoice (netPayable minus amount already received), or 0 if paid."""
     last = (
         db.query(Invoice)
         .filter(Invoice.tenant_id == tenant.id)
@@ -75,11 +112,7 @@ def next_invoice_defaults(db: Session, tenant: Tenant) -> dict:
     )
     if not last:
         return {"room_start": _q(Decimal("0")), "water_start": _q(Decimal("0")), "previous_dues": _q(Decimal("0"))}
-    if not last.paid:
-        written_off = sum(Decimal(str(wo.amount)) for wo in last.writeoffs)
-        carry = _q(max(Decimal(str(last.total_payable)) - written_off, Decimal("0")))
-    else:
-        carry = _q(Decimal("0"))
+    carry = outstanding(last)
     return {
         "room_start": last.room_end,
         "water_start": last.water_end,
@@ -203,9 +236,13 @@ def delete_invoice(db: Session, invoice: Invoice) -> None:
     db.commit()
 
 
-def net_payable(invoice: Invoice) -> Decimal:
-    total_written_off = sum(Decimal(str(wo.amount)) for wo in invoice.writeoffs)
-    return _q(Decimal(str(invoice.total_payable)) - total_written_off)
+def record_payment(db: Session, invoice: Invoice, amount_paid: Decimal) -> Invoice:
+    if amount_paid < Decimal("0") or amount_paid > net_payable(invoice):
+        raise HTTPException(status_code=422, detail=f"Amount must be between 0 and {net_payable(invoice)}")
+    invoice.amount_paid = _q(amount_paid)
+    db.commit()
+    db.refresh(invoice)
+    return invoice
 
 
 def create_writeoff(db: Session, invoice: Invoice, amount: Decimal, reason: str, written_off_by: str | None) -> Invoice:

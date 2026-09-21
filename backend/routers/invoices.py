@@ -8,7 +8,7 @@ from backend.core.deps import get_current_admin
 from backend.database import get_db
 from backend.models.admin_user import AdminUser
 from fastapi import UploadFile, File
-from backend.schemas.invoice import InvoiceCreate, InvoiceUpdate, InvoiceOut, TogglePaidRequest
+from backend.schemas.invoice import InvoiceCreate, InvoiceUpdate, InvoiceOut, TogglePaidRequest, RecordPaymentRequest
 from backend.schemas.invoice_writeoff import WriteOffCreate, WriteOffOut
 from backend.schemas.tenant_document import DocumentOut
 from backend.models.tenant_document import TenantDocument
@@ -22,6 +22,7 @@ def _doc_out(d) -> DocumentOut:
     return DocumentOut(
         id=d.id, tenantId=d.tenant_id, originalFilename=d.original_filename,
         contentType=d.content_type, sizeBytes=d.size_bytes, docType=d.doc_type,
+        tenantVisible=bool(d.tenant_visible),
         invoiceId=d.invoice_id, uploadedAt=d.uploaded_at,
     )
 
@@ -49,9 +50,10 @@ def _out(inv, db=None) -> InvoiceOut:
         monthlyRent=inv.monthly_rent, upiId=inv.upi_id, payeeName=inv.payee_name, dueDays=inv.due_days,
         roomUsage=inv.room_usage, waterUsage=inv.water_usage, roomAmount=inv.room_amount,
         waterAmount=inv.water_amount, totalPayable=inv.total_payable,
-        paid=inv.paid, paidDate=inv.paid_date, createdAt=inv.created_at,
+        paid=inv.paid, paidDate=inv.paid_date, amountPaid=inv.amount_paid, createdAt=inv.created_at,
         writeOffs=write_offs,
         netPayable=invoice_service.net_payable(inv),
+        outstanding=invoice_service.outstanding(inv),
         meterPhotos=meter_photos,
     )
 
@@ -65,6 +67,7 @@ def list_invoices(tenantId: str, db: Session = Depends(get_db)):
 @router.post("", response_model=InvoiceOut)
 def create_invoice(body: InvoiceCreate, db: Session = Depends(get_db)):
     tenant = tenant_service.get_or_404(db, body.tenantId)
+    invoice_service.check_can_create_invoice(db, tenant)
     settings_row = settings_service.get_or_create(db)
     inv = invoice_service.create_invoice(
         db, tenant,
@@ -96,6 +99,13 @@ def toggle_paid(invoice_id: str, body: TogglePaidRequest, db: Session = Depends(
     from datetime import date as date_cls
     paid_date = body.paidDate or (date_cls.today() if body.paid else None)
     return _out(invoice_service.toggle_paid(db, inv, body.paid, paid_date), db)
+
+
+@router.patch("/{invoice_id}/payment", response_model=InvoiceOut)
+def record_payment(invoice_id: str, body: RecordPaymentRequest, db: Session = Depends(get_db)):
+    inv = invoice_service.get_or_404(db, invoice_id)
+    inv = invoice_service.record_payment(db, inv, body.amountPaid)
+    return _out(inv, db)
 
 
 @router.delete("/{invoice_id}")

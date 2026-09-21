@@ -1,12 +1,20 @@
 import { useEffect, useState } from 'react'
 import { invitesApi } from '@/api/invites'
-import { InviteStatus } from '@/types/tenant'
+import { tenantsApi } from '@/api/tenants'
+import { InviteStatus, Tenant } from '@/types/tenant'
 import { useLabels } from '@/hooks/useLabels'
 
-export default function InviteCodeCard({ tenantId }: { tenantId: string }) {
+interface Props {
+  tenantId: string
+  tenant?: Tenant
+  onTenantUpdated?: (t: Tenant) => void
+}
+
+export default function InviteCodeCard({ tenantId, tenant, onTenantUpdated }: Props) {
   const [status, setStatus] = useState<InviteStatus | null>(null)
   const [loading, setLoading] = useState(true)
   const [copied, setCopied] = useState(false)
+  const [blocking, setBlocking] = useState(false)
   const { l } = useLabels()
 
   async function load() {
@@ -39,17 +47,56 @@ export default function InviteCodeCard({ tenantId }: { tenantId: string }) {
       setCopied(true)
       setTimeout(() => setCopied(false), 2000)
     } catch {
-      // clipboard may be unavailable (non-HTTPS, permissions) -- link is still shown to copy manually
+      // clipboard may be unavailable (non-HTTPS, permissions)
+    }
+  }
+
+  async function handleToggleBlock() {
+    setBlocking(true)
+    try {
+      const updated = await tenantsApi.togglePortalBlock(tenantId)
+      onTenantUpdated?.(updated)
+    } finally {
+      setBlocking(false)
     }
   }
 
   if (loading) return <p className="text-sm text-slate-500">{l('status.loading', 'Loading…')}</p>
 
   if (status?.hasRegistered) {
+    const isBlocked = tenant?.portalAccessBlocked ?? false
     return (
-      <p className="text-sm text-slate-600 dark:text-slate-400">
-        {l('invite.alreadyRegistered', 'This tenant already has a portal login. They can sign in at /portal/login.')}
-      </p>
+      <div className="space-y-4">
+        <p className="text-sm text-slate-600 dark:text-slate-400">
+          {l('invite.alreadyRegistered', 'This tenant already has a portal login. They can sign in at /portal/login.')}
+        </p>
+        <div className="flex items-center gap-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 px-4 py-3">
+          <div className="flex-1">
+            <p className="text-sm font-medium">
+              {l('invite.portalAccess', 'Portal access')}
+            </p>
+            <p className="text-xs text-slate-500 mt-0.5">
+              {isBlocked
+                ? l('invite.accessBlocked', 'Access is currently blocked. The tenant cannot log in.')
+                : l('invite.accessActive', 'The tenant can log in and view their invoices.')}
+            </p>
+          </div>
+          <span className={`text-xs rounded-full px-2 py-0.5 ${isBlocked ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'}`}>
+            {isBlocked ? l('invite.statusBlocked', 'Blocked') : l('invite.statusActive', 'Active')}
+          </span>
+          <button
+            className={`btn-compact ${isBlocked ? 'btn-primary' : 'btn-danger'}`}
+            onClick={handleToggleBlock}
+            disabled={blocking}
+          >
+            {blocking
+              ? l('btn.saving', 'Saving…')
+              : isBlocked
+                ? l('btn.unblockAccess', 'Unblock access')
+                : l('btn.blockAccess', 'Block access')}
+          </button>
+        </div>
+      </div>
     )
   }
 

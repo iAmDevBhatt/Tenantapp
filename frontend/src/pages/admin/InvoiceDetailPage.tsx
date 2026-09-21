@@ -107,6 +107,12 @@ export default function InvoiceDetailPage() {
     navigate(`/tenants/${invoice.tenantId}`)
   }
 
+  async function handleRecordPayment(amountPaid: number) {
+    if (!invoice) return
+    const updated = await invoicesApi.recordPayment(invoice.id, amountPaid)
+    setInvoice(updated)
+  }
+
   async function handleDeleteWriteOff(writeOffId: string) {
     if (!invoice || !confirm(l('confirm.undoWriteOff', 'Undo this write-off?'))) return
     const updated = await invoicesApi.deleteWriteOff(invoice.id, writeOffId)
@@ -146,6 +152,7 @@ export default function InvoiceDetailPage() {
 
   const hasWriteOffs = invoice.writeOffs.length > 0
   const netLessThanTotal = parseFloat(invoice.netPayable) < parseFloat(invoice.totalPayable)
+  const isPartiallyPaid = !invoice.paid && invoice.amountPaid !== null
 
   return (
     <div className="space-y-4">
@@ -153,8 +160,8 @@ export default function InvoiceDetailPage() {
 
       <div className="flex items-center justify-between flex-wrap gap-2">
         <div className="flex items-center gap-2">
-          <span className={`text-xs rounded-full px-3 py-1 ${invoice.paid ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'}`}>
-            {invoice.paid ? l('status.paid', 'Paid') : l('status.unpaid', 'Unpaid')}
+          <span className={`text-xs rounded-full px-3 py-1 ${invoice.paid ? 'bg-green-100 text-green-700' : isPartiallyPaid ? 'bg-orange-100 text-orange-700' : 'bg-amber-100 text-amber-700'}`}>
+            {invoice.paid ? l('status.paid', 'Paid') : isPartiallyPaid ? l('status.partiallyPaid', 'Partially paid') : l('status.unpaid', 'Unpaid')}
           </span>
           {netLessThanTotal && (
             <span className="text-xs rounded-full px-3 py-1 bg-blue-100 text-blue-700">
@@ -179,6 +186,36 @@ export default function InvoiceDetailPage() {
           propertyPhotoSrc={photoSrc}
         />
       </div>
+
+      {/* Payment recording */}
+      {!invoice.paid && (
+        <div className="max-w-lg mx-auto card p-4 sm:p-6 space-y-4">
+          <div className="flex items-center justify-between">
+            <h2 className="font-semibold">{l('payment.section.title', 'Payment Received')}</h2>
+            {isPartiallyPaid && (
+              <span className="text-sm">
+                {l('payment.outstanding', 'Outstanding')}:{' '}
+                <strong className="text-red-600 dark:text-red-400">{formatINR(invoice.outstanding)}</strong>
+              </span>
+            )}
+          </div>
+          {isPartiallyPaid && (
+            <div className="text-sm text-slate-600 dark:text-slate-400">
+              {l('payment.receivedSoFar', 'Received so far')}:{' '}
+              <strong className="text-green-700 dark:text-green-400">{formatINR(invoice.amountPaid!)}</strong>
+              {' '}
+              <span className="text-slate-400">{l('payment.ofTotal', 'of')} {formatINR(invoice.netPayable)}</span>
+            </div>
+          )}
+          <RecordPaymentForm
+            invoiceId={invoice.id}
+            netPayable={invoice.netPayable}
+            currentAmountPaid={invoice.amountPaid}
+            onSaved={handleRecordPayment}
+            l={l}
+          />
+        </div>
+      )}
 
       {/* Meter reading photos */}
       <div className="max-w-lg mx-auto card p-4 sm:p-6 space-y-3">
@@ -361,6 +398,64 @@ function WriteOffForm({ invoiceId, netPayable, onAdded, l }: WriteOffFormProps) 
       <button type="submit" className="btn-primary btn-compact" disabled={saving}>
         {saving ? l('btn.saving', 'Saving…') : l('writeoff.btn.add', 'Write off amount')}
       </button>
+    </form>
+  )
+}
+
+interface RecordPaymentFormProps {
+  invoiceId: string
+  netPayable: string
+  currentAmountPaid: string | null
+  onSaved: (amountPaid: number) => Promise<void>
+  l: (key: string, fallback: string) => string
+}
+
+function RecordPaymentForm({ netPayable, currentAmountPaid, onSaved, l }: RecordPaymentFormProps) {
+  const net = parseFloat(netPayable) || 0
+  const [amount, setAmount] = useState(currentAmountPaid !== null ? currentAmountPaid : '')
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  async function handleSubmit(e: FormEvent) {
+    e.preventDefault()
+    const amt = parseFloat(amount)
+    if (isNaN(amt) || amt < 0 || amt > net) {
+      setError(l('payment.validation.range', `Amount must be between 0 and ${net}`))
+      return
+    }
+    setSaving(true)
+    setError(null)
+    try {
+      await onSaved(amt)
+    } catch (err: any) {
+      setError(err?.response?.data?.detail || l('error.generic', 'Something went wrong'))
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-3 pt-2 border-t border-slate-200 dark:border-slate-800">
+      <p className="text-xs font-medium text-slate-500">
+        {currentAmountPaid !== null ? l('payment.updateTitle', 'Update amount received') : l('payment.addTitle', 'Record amount received')}
+      </p>
+      {error && <div className="rounded-lg bg-red-50 text-red-700 px-3 py-2 text-sm">{error}</div>}
+      <div className="flex gap-3 items-end">
+        <div className="flex-1">
+          <label className="field-label">{l('payment.label.amount', 'Amount received (₹)')}</label>
+          <input
+            className="field-input" type="number" step="0.01" min="0" max={net}
+            placeholder="0.00" required value={amount}
+            onChange={(e) => setAmount(e.target.value)}
+          />
+        </div>
+        <button type="submit" className="btn-primary btn-compact" disabled={saving}>
+          {saving ? l('btn.saving', 'Saving…') : l('payment.btn.save', 'Save')}
+        </button>
+      </div>
+      <p className="text-xs text-slate-400">
+        {l('payment.hint', 'Enter the total amount received so far. The outstanding balance carries forward to the next invoice.')}
+      </p>
     </form>
   )
 }

@@ -42,6 +42,8 @@ def update_tenant(db: Session, tenant: Tenant, data: dict) -> Tenant:
 def deactivate(db: Session, tenant: Tenant, move_out_date: date | None) -> Tenant:
     tenant.active = False
     tenant.move_out_date = move_out_date or date.today()
+    if tenant.tenant_user:
+        tenant.tenant_user.portal_access_blocked = True
     db.commit()
     db.refresh(tenant)
     return tenant

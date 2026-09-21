@@ -34,4 +34,7 @@ export const tenantsApi = {
   profilePhotoUrl: (tenantId: string) => `/tenants/${tenantId}/profile-photo`,
 
   downloadAllDocsUrl: (tenantId: string) => `/tenants/${tenantId}/documents/download-all`,
+
+  togglePortalBlock: (tenantId: string) =>
+    adminClient.patch<Tenant>(`/tenants/${tenantId}/portal-block`).then((r) => r.data),
 }

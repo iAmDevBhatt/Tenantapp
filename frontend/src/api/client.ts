@@ -4,7 +4,7 @@ import axios, { AxiosInstance } from 'axios'
  * specific redirect target on 401. Two independent instances (admin + portal)
  * let an admin tab and a tenant-portal tab coexist in the same browser
  * without clobbering each other's session. */
-export function createApiClient(tokenKey: string, loginPath: string): AxiosInstance {
+export function createApiClient(tokenKey: string, loginPath: string, redirectOn403 = false): AxiosInstance {
   const instance = axios.create({ baseURL: '/api' })
 
   instance.interceptors.request.use((config) => {
@@ -18,7 +18,8 @@ export function createApiClient(tokenKey: string, loginPath: string): AxiosInsta
   instance.interceptors.response.use(
     (res) => res,
     (error) => {
-      if (error.response?.status === 401) {
+      const status = error.response?.status
+      if (status === 401 || (redirectOn403 && status === 403)) {
         localStorage.removeItem(tokenKey)
         if (window.location.pathname !== loginPath) {
           window.location.href = loginPath
