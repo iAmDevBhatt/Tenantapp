@@ -50,6 +50,8 @@ falls out naturally.
       §04
 - [ ] CI: at minimum, `tsc`/lint on push. Add backend tests+lint even if the
       source projects skipped them.
+- [ ] Security baseline wired (§11) — rate limits, security headers, upload
+      guards, JWT boot check — before first user-facing feature
 
 ---
 
@@ -674,7 +676,271 @@ wired up yet.
 
 ---
 
-## 11. Production-hardening checklist
+## 11. Security baseline (implement from day one)
+
+These patterns were discovered through a security audit of Rent Ledger and are
+all generic enough to apply to any FastAPI app fronting real user data. They
+cost almost nothing to wire in early and are painful to retrofit later.
+
+### 11a. Rate limiting — `core/limiter.py`
+
+Add `slowapi` to `requirements.txt` and create one shared module:
+
+```python
+# core/limiter.py
+from slowapi import Limiter
+from slowapi.util import get_remote_address
+
+limiter = Limiter(key_func=get_remote_address)
+```
+
+Wire it into `main.py`:
+
+```python
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+from core.limiter import limiter
+
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+```
+
+Then decorate every auth endpoint. Note `request: Request` must be the first
+param (slowapi requires it):
+
+```python
+from core.limiter import limiter
+
+@router.post("/login")
+@limiter.limit("20/minute")
+def login(request: Request, body: LoginRequest, db: Session = Depends(get_db)):
+    ...
+
+@router.post("/register")
+@limiter.limit("10/minute")
+def register(request: Request, body: RegisterRequest, db: Session = Depends(get_db)):
+    ...
+```
+
+Apply to both admin auth and any tenant/portal auth routes. A separate
+`core/limiter.py` module avoids circular imports — routers import from it,
+`main.py` also imports from it.
+
+### 11b. Security response headers middleware
+
+Drop this into `main.py` before the CORS middleware:
+
+```python
+from starlette.middleware.base import BaseHTTPMiddleware
+
+class SecurityHeadersMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        response = await call_next(request)
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["X-Frame-Options"] = "DENY"
+        response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+        response.headers["Permissions-Policy"] = "geolocation=(), microphone=(), camera=()"
+        return response
+
+app.add_middleware(SecurityHeadersMiddleware)
+```
+
+`X-Content-Type-Options: nosniff` prevents browsers from MIME-sniffing
+uploaded files into executable content. `X-Frame-Options: DENY` blocks
+clickjacking iframes. These two are the highest-value lines.
+
+### 11c. File upload hardening
+
+Any endpoint that accepts user file uploads needs three guards:
+
+```python
+# services/document_service.py (or equivalent upload service)
+import re
+MAX_UPLOAD_BYTES = 20 * 1024 * 1024  # 20 MB hard cap
+
+ALLOWED_CONTENT_TYPES = {
+    "image/jpeg", "image/png", "image/gif", "image/webp",
+    "application/pdf",
+    "application/msword",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    "application/vnd.ms-excel",
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+}
+
+async def save_upload(file: UploadFile, dest: Path) -> None:
+    # 1. MIME type allowlist — validate server-side, don't trust Content-Type header alone
+    if file.content_type not in ALLOWED_CONTENT_TYPES:
+        raise HTTPException(415, f"File type '{file.content_type}' is not allowed")
+
+    # 2. Size cap with partial-file cleanup
+    written = 0
+    try:
+        with open(dest, "wb") as f:
+            while chunk := await file.read(64 * 1024):
+                written += len(chunk)
+                if written > MAX_UPLOAD_BYTES:
+                    f.close()
+                    dest.unlink(missing_ok=True)
+                    raise HTTPException(413, "File exceeds 20 MB limit")
+                f.write(chunk)
+    except HTTPException:
+        dest.unlink(missing_ok=True)
+        raise
+```
+
+**Zip-slip prevention** — when generating zip archives from stored filenames,
+never use the raw stored name as the zip entry name:
+
+```python
+import pathlib
+# Wrong: arc.write(filepath, arcname=doc.original_filename)
+# Right:
+safe_name = pathlib.PurePosixPath(doc.original_filename).name  # strips any ../
+arc.write(filepath, arcname=safe_name)
+```
+
+**Content-Disposition sanitization** — when setting a download filename in a
+response header, sanitize user-controlled values (e.g. tenant names, invoice
+numbers) so they can't inject newlines or quotes into the header:
+
+```python
+import re
+safe_name = re.sub(r'[^\w\-]', '_', tenant.name)
+headers = {"Content-Disposition": f'attachment; filename="{safe_name}.zip"'}
+```
+
+### 11d. Input validation — Pydantic `@field_validator`
+
+Use `@field_validator` on auth schemas to enforce minimum password/username
+lengths before the password even reaches bcrypt:
+
+```python
+from pydantic import BaseModel, field_validator
+
+class RegisterRequest(BaseModel):
+    username: str
+    password: str
+
+    @field_validator("password")
+    @classmethod
+    def password_min_length(cls, v: str) -> str:
+        if len(v) < 8:
+            raise ValueError("Password must be at least 8 characters")
+        return v
+
+    @field_validator("username")
+    @classmethod
+    def username_min_length(cls, v: str) -> str:
+        if len(v) < 3:
+            raise ValueError("Username must be at least 3 characters")
+        return v
+```
+
+### 11e. JWT_SECRET boot-time guard
+
+`core/config.py` has no default for `JWT_SECRET`. Add an explicit boot check
+in `main.py` so the app fails fast with a clear message rather than silently
+running with an empty or placeholder secret:
+
+```python
+if not settings.JWT_SECRET or settings.JWT_SECRET == "change-me":
+    if settings.DEBUG:
+        import warnings
+        warnings.warn(
+            "JWT_SECRET is not set — tokens are INSECURE. Set JWT_SECRET before deploying.",
+            stacklevel=1,
+        )
+    else:
+        raise RuntimeError(
+            "JWT_SECRET is not set (or is left at a placeholder value). "
+            "Set a real secret via the JWT_SECRET environment variable."
+        )
+```
+
+In `docker-compose.yml` use the `${VAR:?message}` form to fail compose itself
+before the container even starts:
+
+```yaml
+environment:
+  - JWT_SECRET=${JWT_SECRET:?must be set — see README for setup instructions}
+```
+
+### 11f. Raw SQL guard in migrations
+
+If using the hand-written `migrate.py` pattern (§08 Option A), add a
+table-name allowlist to the helper that builds `ALTER TABLE` statements:
+
+```python
+_KNOWN_TABLES = {"users", "items", "..."}  # every table in the schema
+
+def _add_column_if_missing(conn, table, column, ddl_type):
+    assert table in _KNOWN_TABLES, f"migrate: unexpected table name '{table}'"
+    # safe to interpolate — validated against the allowlist above
+    rows = conn.execute(text(f"PRAGMA table_info({table})")).fetchall()
+    ...
+```
+
+This prevents a copy-paste error or a future code-gen mistake from introducing
+a raw-SQL injection vector into the migration runner.
+
+### 11g. Cross-tenant IDOR — scope every DB lookup to the authenticated user
+
+For any app with multi-tenant or multi-user data, portal/tenant routes must
+never look up a resource by the ID in the URL alone. Always scope the query
+through the authenticated identity:
+
+```python
+# Wrong — trusts the URL parameter
+invoice = db.query(Invoice).filter(Invoice.id == invoice_id).first()
+
+# Right — scopes to the authenticated tenant's ID from the JWT
+def _owned_invoice_or_404(invoice_id, tenant_user, db):
+    inv = (db.query(Invoice)
+           .filter(Invoice.id == invoice_id,
+                   Invoice.tenant_id == tenant_user.tenant_id)
+           .first())
+    if not inv:
+        raise HTTPException(404)   # 404, not 403 — don't confirm existence
+    return inv
+```
+
+Return 404 (not 403) on access to another user's resource — a 403 would
+confirm the record exists, letting an attacker enumerate valid IDs.
+
+### 11h. Runtime config for values known only at deploy time
+
+Vite env vars (`VITE_*`) are baked at image build time — you can't change them
+without a rebuild. For values that are only known at deploy time (e.g. the
+public domain for invite links), serve them from the backend at runtime:
+
+```python
+# backend: public, no auth required
+@app.get("/api/config")
+def public_config():
+    return {"appUrl": settings.APP_URL or None}
+```
+
+```ts
+// frontend: fetch once, cache at module level
+let cached: AppConfig | null = null
+let fetchPromise: Promise<AppConfig> | null = null
+
+export function useAppConfig() {
+  if (!fetchPromise) {
+    fetchPromise = fetch('/api/config').then(r => r.json()).then(d => { cached = d; return d })
+  }
+  const [config, setConfig] = useState<AppConfig | null>(cached)
+  useEffect(() => { if (!cached) fetchPromise!.then(setConfig) }, [])
+  return { appOrigin: () => config?.appUrl ?? window.location.origin }
+}
+```
+
+This lets the deployer set `APP_URL=https://myapp.example.com` in
+`docker-compose.yml` without a rebuild.
+
+---
+
+## 12. Production-hardening checklist
 
 Pulled from real gaps in both source apps this pattern was extracted from —
 so the gaps get inherited on purpose, not by accident. Close every 🔴 item
@@ -682,10 +948,10 @@ before this pattern fronts real user data on the open internet.
 
 | Status | Item | Why it matters |
 |---|---|---|
-| 🔴 GAP | No committed secret fallback | Both source apps defaulted a secret (`JWT_SECRET`, `SECRET_KEY: change-me-in-production…`) "for convenience." Use `${VAR:?required}` in compose, or fail loudly on boot if a known placeholder value is still in place. |
+| 🔴 GAP | No committed secret fallback | Both source apps defaulted a secret (`JWT_SECRET`, `SECRET_KEY: change-me-in-production…`) "for convenience." Use `${VAR:?required}` in compose, or fail loudly on boot if a known placeholder value is still in place. See §11e. |
 | 🔴 GAP | CORS wide open | `allow_origins=["*"]` with `allow_credentials=True`, or `localhost:*`, is fine behind a private network — lock to explicit origins once anything is public-facing. |
 | 🔴 GAP | No gate on registration | If `/auth/register` is unauthenticated, anyone reaching the API can create an account. For a single-household/internal tool, disable public registration or require an existing admin to create users. |
-| 🔴 GAP | No rate limiting on login/register | JWT + bcrypt is sound; nothing slows down a brute-force credential attempt without it. |
+| 🔴 GAP | No rate limiting on login/register | JWT + bcrypt is sound; nothing slows down a brute-force credential attempt without it. See §11a. |
 | 🔴 GAP | No automated tests, no CI pipeline | Neither source repo had a `tests/` directory or CI workflows — migrations and status-transition rules are exactly the kind of logic that regresses silently without one. At minimum: `tsc`/lint on push, plus backend tests+lint. |
 | 🟡 PARTIAL | TLS / reverse proxy assumed, not documented | The container serves plain HTTP on its own port; state explicitly "put Caddy/Traefik/nginx in front for TLS" rather than leave it implied by the deployment being internal. |
 | 🟡 PARTIAL | JWT stored in localStorage | Readable by any injected JS (XSS blast radius) — move to an httpOnly cookie if you can. |
@@ -693,10 +959,14 @@ before this pattern fronts real user data on the open internet.
 | 🟡 PARTIAL | No documented backup routine for volumes | The SQLite file and uploads directory are durable across redeploys, but nothing automates copying them off-box. |
 | 🟡 PARTIAL | Seeded default admin credentials | Change default admin credentials on first login — don't leave a seeded `admin/admin123` reachable in prod. |
 | ✅ DONE | Migrations, healthcheck, PUID/PGID ownership, idempotent seeding | The operational basics most templates skip — keep these when copying the pattern forward. |
+| ✅ DONE | Security response headers | `X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy` via middleware. See §11b. |
+| ✅ DONE | File upload MIME allowlist + size cap + zip-slip prevention | See §11c. |
+| ✅ DONE | Input validation on auth schemas | Pydantic `@field_validator` for min password/username length. See §11d. |
+| ✅ DONE | Cross-tenant IDOR prevention | All portal queries scoped through JWT's `tenantId`, 404 on miss. See §11g. |
 
 ---
 
-## 12. Docs-as-template layering
+## 13. Docs-as-template layering
 
 Four documents, four audiences — write all four for a new project, not just
 a README:
@@ -763,7 +1033,7 @@ to check, what to do if it fails.
 
 ---
 
-## 13. Starting the next project from this pattern
+## 14. Starting the next project from this pattern
 
 1. Work through the §00 checklist first — app name, DB, auth model, secrets
    source, container topology, migrations strategy, frontend state strategy,
@@ -779,8 +1049,12 @@ to check, what to do if it fails.
    component classes, so every new component inherits them for free.
 6. Reserve the MCP mount point and pick your 1–2 tool-callable stats
    endpoints (§10) even if no AI feature ships in v1.
-7. Write all four docs (§12), not just a README.
-8. Before calling it production-ready, walk §11 top to bottom against the
+7. Wire in the §11 security baseline before the first user-facing feature:
+   rate limiting (§11a), security headers (§11b), upload guards (§11c),
+   input validation (§11d), JWT boot check (§11e). These are ten-minute
+   additions that are painful to audit-and-retrofit later.
+8. Write all four docs (§13), not just a README.
+9. Before calling it production-ready, walk §12 top to bottom against the
    new project specifically — it will have its own placeholder secret and
    its own open registration route.
 
