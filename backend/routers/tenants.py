@@ -150,7 +150,8 @@ def delete_document(tenant_id: str, document_id: str, db: Session = Depends(get_
 def download_all_documents(tenant_id: str, db: Session = Depends(get_db)):
     tenant = tenant_service.get_or_404(db, tenant_id)
     zip_bytes = document_service.build_tenant_zip(db, tenant)
-    safe_name = tenant.name.replace(" ", "_")
+    import re
+    safe_name = re.sub(r'[^\w\-]', '_', tenant.name)
     return Response(
         content=zip_bytes,
         media_type="application/zip",

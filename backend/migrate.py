@@ -19,7 +19,15 @@ from backend.database import engine, Base
 import backend.models  # noqa: F401
 
 
+_KNOWN_TABLES = {
+    "tenants", "tenant_users", "tenant_documents", "tenant_invites",
+    "invoices", "invoice_writeoffs", "properties", "property_flats",
+    "meter_submissions", "admin_users", "settings",
+}
+
+
 def _add_column_if_missing(conn: Connection, table: str, column: str, ddl_type: str) -> None:
+    assert table in _KNOWN_TABLES, f"migrate: unexpected table name '{table}'"
     existing = {row[1] for row in conn.execute(text(f"PRAGMA table_info({table})")).fetchall()}
     if column not in existing:
         print(f"migrate: adding {table}.{column}")

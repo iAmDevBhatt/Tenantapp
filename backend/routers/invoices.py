@@ -123,7 +123,9 @@ def get_invoice_pdf(invoice_id: str, db: Session = Depends(get_db)):
         pdf_bytes = render_invoice_pdf(inv, inv.tenant, settings_row)
     except PdfUnavailableError as e:
         raise HTTPException(status_code=501, detail=str(e))
-    filename = f"invoice-{inv.tenant.name.replace(' ', '_')}-{inv.invoice_date}.pdf"
+    import re
+    safe_name = re.sub(r'[^\w\-]', '_', inv.tenant.name)
+    filename = f"invoice-{safe_name}-{inv.invoice_date}.pdf"
     return Response(
         content=pdf_bytes, media_type="application/pdf",
         headers={"Content-Disposition": f'inline; filename="{filename}"'},

@@ -1,4 +1,5 @@
 import os
+import re
 import uuid
 
 from fastapi import HTTPException, UploadFile
@@ -6,6 +7,17 @@ from sqlalchemy.orm import Session
 
 from backend.core.config import settings
 from backend.models.tenant_document import TenantDocument
+
+MAX_UPLOAD_BYTES = 20 * 1024 * 1024  # 20 MB
+
+ALLOWED_CONTENT_TYPES = {
+    "image/jpeg", "image/png", "image/gif", "image/webp",
+    "application/pdf",
+    "application/msword",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    "application/vnd.ms-excel",
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+}
 
 DOCS_SUBDIR = "tenants"
 
@@ -26,6 +38,9 @@ def list_for_tenant(db: Session, tenant_id: str) -> list[TenantDocument]:
 
 
 def save_upload(db: Session, tenant_id: str, upload: UploadFile, doc_type: str) -> TenantDocument:
+    if upload.content_type and upload.content_type not in ALLOWED_CONTENT_TYPES:
+        raise HTTPException(status_code=415, detail="Unsupported file type")
+
     original = upload.filename or "file"
     ext = os.path.splitext(original)[1]
     stored_name = f"{uuid.uuid4()}{ext}"
@@ -33,10 +48,17 @@ def save_upload(db: Session, tenant_id: str, upload: UploadFile, doc_type: str) 
     abs_path = os.path.join(tenant_dir, stored_name)
 
     size = 0
-    with open(abs_path, "wb") as f:
-        while chunk := upload.file.read(1024 * 1024):
-            size += len(chunk)
-            f.write(chunk)
+    try:
+        with open(abs_path, "wb") as f:
+            while chunk := upload.file.read(65536):
+                size += len(chunk)
+                if size > MAX_UPLOAD_BYTES:
+                    raise HTTPException(status_code=413, detail="File too large (20 MB max)")
+                f.write(chunk)
+    except HTTPException:
+        if os.path.exists(abs_path):
+            os.remove(abs_path)
+        raise
 
     rel_path = os.path.join(DOCS_SUBDIR, tenant_id, stored_name)
     doc = TenantDocument(
@@ -85,9 +107,18 @@ def save_profile_photo(db: Session, tenant, upload: UploadFile):
     tenant_dir = _tenant_dir(tenant.id)
     abs_path = os.path.join(tenant_dir, stored_name)
 
-    with open(abs_path, "wb") as f:
-        while chunk := upload.file.read(1024 * 1024):
-            f.write(chunk)
+    size = 0
+    try:
+        with open(abs_path, "wb") as f:
+            while chunk := upload.file.read(65536):
+                size += len(chunk)
+                if size > MAX_UPLOAD_BYTES:
+                    raise HTTPException(status_code=413, detail="File too large (20 MB max)")
+                f.write(chunk)
+    except HTTPException:
+        if os.path.exists(abs_path):
+            os.remove(abs_path)
+        raise
 
     tenant.profile_photo_path = os.path.join(DOCS_SUBDIR, tenant.id, stored_name)
     db.commit()
@@ -123,7 +154,10 @@ def build_tenant_zip(db: Session, tenant) -> bytes:
         for doc in docs:
             path = absolute_path(doc)
             if os.path.exists(path):
-                zf.write(path, doc.original_filename)
+                # Strip directory components to prevent zip-slip extraction
+                import pathlib
+                safe_entry = pathlib.PurePosixPath(doc.original_filename).name or doc.filename
+                zf.write(path, safe_entry)
         if tenant.profile_photo_path:
             pp = os.path.join(settings.UPLOADS_DIR, tenant.profile_photo_path)
             if os.path.exists(pp):

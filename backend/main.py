@@ -1,9 +1,13 @@
 import os
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.middleware.base import BaseHTTPMiddleware
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
 
 from backend.core.config import settings
+from backend.core.limiter import limiter
 from backend.database import engine, Base
 import backend.models  # noqa: F401 -- import side effect: registers all tables on Base
 
@@ -12,17 +16,38 @@ from backend.routers import (
     properties, catchall_router,
 )
 
-if not settings.DEBUG and (not settings.JWT_SECRET or settings.JWT_SECRET == "change-me"):
-    raise RuntimeError(
-        "JWT_SECRET is not set (or is left at a placeholder value). Set a real secret via "
-        "the JWT_SECRET environment variable before starting the app."
-    )
+if not settings.JWT_SECRET or settings.JWT_SECRET == "change-me":
+    if settings.DEBUG:
+        import warnings
+        warnings.warn(
+            "JWT_SECRET is not set — tokens are INSECURE. Set JWT_SECRET before deploying.",
+            stacklevel=1,
+        )
+    else:
+        raise RuntimeError(
+            "JWT_SECRET is not set (or is left at a placeholder value). Set a real secret via "
+            "the JWT_SECRET environment variable before starting the app."
+        )
 
 # New tables only -- see migrate.py for changes to existing tables.
 Base.metadata.create_all(bind=engine)
 
 app = FastAPI(title=settings.APP_NAME)
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
+
+class SecurityHeadersMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        response = await call_next(request)
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["X-Frame-Options"] = "DENY"
+        response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+        response.headers["Permissions-Policy"] = "geolocation=(), microphone=(), camera=()"
+        return response
+
+
+app.add_middleware(SecurityHeadersMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins_list(),

@@ -1,7 +1,8 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 from sqlalchemy.orm import Session
 
 from backend.core.deps import get_current_admin
+from backend.core.limiter import limiter
 from backend.database import get_db
 from backend.models.admin_user import AdminUser
 from backend.schemas.auth import LoginRequest, TokenResponse, AdminOut, ChangePasswordRequest
@@ -11,7 +12,8 @@ router = APIRouter(prefix="/api/auth", tags=["auth"])
 
 
 @router.post("/login", response_model=TokenResponse)
-def login(body: LoginRequest, db: Session = Depends(get_db)):
+@limiter.limit("20/minute")
+def login(request: Request, body: LoginRequest, db: Session = Depends(get_db)):
     token = auth_service.admin_login(db, body.username, body.password)
     return TokenResponse(accessToken=token, role="admin")
 
