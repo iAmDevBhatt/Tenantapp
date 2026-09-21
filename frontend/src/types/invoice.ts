@@ -66,4 +66,5 @@ export interface InvoiceCreateInput {
   waterStart: string
   waterEnd: string
   previousDues: string
+  meterSubmissionIds?: string[]
 }

@@ -1,9 +1,13 @@
-from fastapi import APIRouter, Depends, UploadFile, File, Form
+import mimetypes
+
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
 from fastapi.responses import FileResponse, Response
 from sqlalchemy.orm import Session
 
 from backend.core.deps import get_current_admin
 from backend.database import get_db
+from backend.models.meter_submission import MeterSubmission
+from backend.schemas.meter_submission import MeterSubmissionOut, ReviewRequest
 from backend.schemas.tenant import (
     TenantCreate, TenantUpdate, TenantOut, DeactivateRequest, NextInvoiceDefaults,
 )
@@ -228,3 +232,74 @@ def delete_invite(tenant_id: str, db: Session = Depends(get_db)):
     tenant_service.get_or_404(db, tenant_id)
     invite_service.revoke_invite(db, tenant_id)
     return {"ok": True}
+
+
+# --- Meter submissions (admin review) ---
+
+def _ms_out(ms: MeterSubmission) -> MeterSubmissionOut:
+    return MeterSubmissionOut(
+        id=ms.id,
+        tenantId=ms.tenant_id,
+        photoType=ms.photo_type,
+        originalFilename=ms.original_filename,
+        contentType=ms.content_type,
+        sizeBytes=ms.size_bytes,
+        submittedAt=ms.submitted_at,
+        status=ms.status,
+        appliedToInvoiceId=ms.applied_to_invoice_id,
+        notes=ms.notes,
+    )
+
+
+@router.get("/{tenant_id}/meter-submissions", response_model=list[MeterSubmissionOut])
+def list_meter_submissions(
+    tenant_id: str,
+    status: str | None = None,
+    db: Session = Depends(get_db),
+):
+    tenant_service.get_or_404(db, tenant_id)
+    q = db.query(MeterSubmission).filter(MeterSubmission.tenant_id == tenant_id)
+    if status:
+        q = q.filter(MeterSubmission.status == status)
+    rows = q.order_by(MeterSubmission.submitted_at.desc()).all()
+    return [_ms_out(ms) for ms in rows]
+
+
+@router.get("/{tenant_id}/meter-submissions/{ms_id}/photo")
+def get_meter_submission_photo(tenant_id: str, ms_id: str, db: Session = Depends(get_db)):
+    tenant_service.get_or_404(db, tenant_id)
+    ms = db.query(MeterSubmission).filter(
+        MeterSubmission.id == ms_id,
+        MeterSubmission.tenant_id == tenant_id,
+    ).first()
+    if not ms:
+        raise HTTPException(status_code=404, detail="Meter submission not found")
+    path = document_service.meter_submission_absolute_path(ms)
+    mime = ms.content_type or mimetypes.guess_type(ms.original_filename)[0] or "image/jpeg"
+    return FileResponse(path, media_type=mime)
+
+
+@router.post("/{tenant_id}/meter-submissions/{ms_id}/review", response_model=MeterSubmissionOut)
+def review_meter_submission(
+    tenant_id: str,
+    ms_id: str,
+    body: ReviewRequest,
+    db: Session = Depends(get_db),
+):
+    tenant_service.get_or_404(db, tenant_id)
+    ms = db.query(MeterSubmission).filter(
+        MeterSubmission.id == ms_id,
+        MeterSubmission.tenant_id == tenant_id,
+    ).first()
+    if not ms:
+        raise HTTPException(status_code=404, detail="Meter submission not found")
+    if ms.status != "pending":
+        raise HTTPException(status_code=409, detail=f"Submission is already '{ms.status}'")
+    if body.action == "approve":
+        ms.status = "approved"
+    else:
+        ms.status = "rejected"
+        ms.notes = body.notes
+    db.commit()
+    db.refresh(ms)
+    return _ms_out(ms)

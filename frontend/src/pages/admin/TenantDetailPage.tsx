@@ -3,8 +3,10 @@ import { Link, useNavigate, useParams } from 'react-router-dom'
 import { adminClient } from '@/api/adminClient'
 import { tenantsApi } from '@/api/tenants'
 import { invoicesApi } from '@/api/invoices'
+import { meterSubmissionsApi } from '@/api/meterSubmissions'
 import { Tenant } from '@/types/tenant'
 import { Invoice } from '@/types/invoice'
+import { MeterSubmission } from '@/types/meterSubmission'
 import { formatINR } from '@/utils/formulas'
 import { fetchAuthedBlob, triggerBlobDownload } from '@/utils/blob'
 import TenantForm from '@/components/TenantForm'
@@ -13,7 +15,14 @@ import DocumentList from '@/components/DocumentList'
 import InviteCodeCard from '@/components/InviteCodeCard'
 import { useLabels } from '@/hooks/useLabels'
 
-type Tab = 'profile' | 'documents' | 'invoices' | 'invite'
+type Tab = 'profile' | 'documents' | 'invoices' | 'invite' | 'meter'
+
+const PHOTO_TYPE_LABELS: Record<string, string> = {
+  flat_meter: 'Flat Meter',
+  water_meter: 'Water Meter',
+  property: 'Whole Property',
+  other: 'Other',
+}
 
 export default function TenantDetailPage() {
   const { tenantId } = useParams<{ tenantId: string }>()
@@ -26,23 +35,47 @@ export default function TenantDetailPage() {
   const [downloadingAll, setDownloadingAll] = useState(false)
   const { l } = useLabels()
 
+  const [submissions, setSubmissions] = useState<MeterSubmission[]>([])
+  const [rejectingId, setRejectingId] = useState<string | null>(null)
+  const [rejectNotes, setRejectNotes] = useState('')
+
   const TAB_LABELS: Record<Tab, string> = {
     profile: l('tab.profile', 'Profile'),
     documents: l('tab.documents', 'Documents'),
     invoices: l('tab.invoices', 'Invoices'),
     invite: l('tab.invite', 'Invite'),
+    meter: l('tab.meterPhotos', 'Meter Photos'),
   }
 
   async function load() {
     if (!tenantId) return
     setLoading(true)
     try {
-      const [t, inv] = await Promise.all([tenantsApi.get(tenantId), invoicesApi.listForTenant(tenantId)])
+      const [t, inv, subs] = await Promise.all([
+        tenantsApi.get(tenantId),
+        invoicesApi.listForTenant(tenantId),
+        meterSubmissionsApi.listForTenant(tenantId),
+      ])
       setTenant(t)
       setInvoices(inv)
+      setSubmissions(subs)
     } finally {
       setLoading(false)
     }
+  }
+
+  async function handleApprove(ms: MeterSubmission) {
+    if (!tenantId) return
+    const updated = await meterSubmissionsApi.review(tenantId, ms.id, 'approve')
+    setSubmissions((prev) => prev.map((s) => (s.id === ms.id ? updated : s)))
+  }
+
+  async function handleReject(ms: MeterSubmission) {
+    if (!tenantId) return
+    const updated = await meterSubmissionsApi.review(tenantId, ms.id, 'reject', rejectNotes || undefined)
+    setSubmissions((prev) => prev.map((s) => (s.id === ms.id ? updated : s)))
+    setRejectingId(null)
+    setRejectNotes('')
   }
 
   useEffect(() => {
@@ -124,7 +157,7 @@ export default function TenantDetailPage() {
       </div>
 
       <div className="flex gap-1 border-b border-slate-200 dark:border-slate-800 overflow-x-auto">
-        {(['profile', 'documents', 'invoices', 'invite'] as Tab[]).map((t) => (
+        {(['profile', 'documents', 'invoices', 'invite', 'meter'] as Tab[]).map((t) => (
           <button
             key={t}
             className={`btn-compact rounded-none border-b-2 ${tab === t ? 'border-brand-600 text-brand-700 dark:text-brand-300' : 'border-transparent text-slate-500'}`}
@@ -227,6 +260,96 @@ export default function TenantDetailPage() {
           <InviteCodeCard tenantId={tenant.id} tenant={tenant} onTenantUpdated={setTenant} />
         </div>
       )}
+
+      {tab === 'meter' && (
+        <div className="space-y-4">
+          {/* Pending */}
+          {(() => {
+            const pending = submissions.filter((s) => s.status === 'pending')
+            if (pending.length === 0) return null
+            return (
+              <div className="card p-4 sm:p-6 space-y-3">
+                <h3 className="font-semibold text-sm">{l('meter.pendingReview', 'Pending Review')}</h3>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {pending.map((ms) => (
+                    <MeterSubmissionCard
+                      key={ms.id}
+                      ms={ms}
+                      tenantId={tenant.id}
+                      rejectingId={rejectingId}
+                      rejectNotes={rejectNotes}
+                      setRejectingId={setRejectingId}
+                      setRejectNotes={setRejectNotes}
+                      onApprove={handleApprove}
+                      onReject={handleReject}
+                      l={l}
+                    />
+                  ))}
+                </div>
+              </div>
+            )
+          })()}
+
+          {/* Approved */}
+          {(() => {
+            const approved = submissions.filter((s) => s.status === 'approved')
+            if (approved.length === 0) return null
+            return (
+              <div className="card p-4 sm:p-6 space-y-3">
+                <h3 className="font-semibold text-sm">{l('meter.approvedReady', 'Approved — Ready to Tag')}</h3>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {approved.map((ms) => (
+                    <MeterSubmissionCard
+                      key={ms.id}
+                      ms={ms}
+                      tenantId={tenant.id}
+                      rejectingId={rejectingId}
+                      rejectNotes={rejectNotes}
+                      setRejectingId={setRejectingId}
+                      setRejectNotes={setRejectNotes}
+                      onApprove={handleApprove}
+                      onReject={handleReject}
+                      l={l}
+                    />
+                  ))}
+                </div>
+              </div>
+            )
+          })()}
+
+          {/* Applied / rejected history */}
+          {(() => {
+            const history = submissions.filter((s) => s.status === 'applied' || s.status === 'rejected')
+            if (history.length === 0) return null
+            return (
+              <div className="card p-4 sm:p-6 space-y-3">
+                <h3 className="font-semibold text-sm text-slate-500">History</h3>
+                <ul className="divide-y divide-slate-200 dark:divide-slate-800">
+                  {history.map((ms) => (
+                    <li key={ms.id} className="py-2 flex items-center justify-between gap-2">
+                      <div>
+                        <p className="text-sm font-medium">{PHOTO_TYPE_LABELS[ms.photoType] ?? ms.photoType}</p>
+                        <p className="text-xs text-slate-500">
+                          {new Date(ms.submittedAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}
+                          {ms.notes && <span className="ml-1 text-red-500">· {ms.notes}</span>}
+                        </p>
+                      </div>
+                      <span className={`text-xs rounded-full px-2 py-0.5 ${ms.status === 'applied' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                        {ms.status === 'applied' ? 'Used' : 'Rejected'}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )
+          })()}
+
+          {submissions.filter((s) => ['pending', 'approved'].includes(s.status)).length === 0 &&
+            submissions.filter((s) => ['applied', 'rejected'].includes(s.status)).length === 0 && (
+              <p className="text-sm text-slate-500">{l('meter.noSubmissions', 'No photos submitted yet')}</p>
+            )}
+        </div>
+      )}
     </div>
   )
 }
@@ -236,6 +359,80 @@ function Field({ label, value }: { label: string; value: string }) {
     <div>
       <dt className="text-slate-500 text-xs">{label}</dt>
       <dd className="font-medium">{value}</dd>
+    </div>
+  )
+}
+
+function MeterSubmissionCard({
+  ms, tenantId, rejectingId, rejectNotes,
+  setRejectingId, setRejectNotes, onApprove, onReject, l,
+}: {
+  ms: MeterSubmission
+  tenantId: string
+  rejectingId: string | null
+  rejectNotes: string
+  setRejectingId: (id: string | null) => void
+  setRejectNotes: (v: string) => void
+  onApprove: (ms: MeterSubmission) => void
+  onReject: (ms: MeterSubmission) => void
+  l: (key: string, fallback: string) => string
+}) {
+  return (
+    <div className="border border-slate-200 dark:border-slate-700 rounded-lg overflow-hidden">
+      <div className="relative bg-slate-100 dark:bg-slate-800 h-40">
+        <img
+          src={meterSubmissionsApi.previewPhotoUrl(tenantId, ms.id)}
+          alt={ms.originalFilename}
+          className="w-full h-full object-cover"
+          onError={(e) => {
+            (e.target as HTMLImageElement).style.display = 'none'
+          }}
+        />
+      </div>
+      <div className="p-3 space-y-2">
+        <div className="flex items-center justify-between gap-2">
+          <div>
+            <p className="text-sm font-medium">{PHOTO_TYPE_LABELS[ms.photoType] ?? ms.photoType}</p>
+            <p className="text-xs text-slate-500">
+              {new Date(ms.submittedAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}
+            </p>
+          </div>
+          {ms.status === 'approved' && (
+            <span className="text-xs rounded-full px-2 py-0.5 bg-blue-100 text-blue-700">
+              {l('meter.status.approved', 'Approved')}
+            </span>
+          )}
+        </div>
+        {ms.status === 'pending' && rejectingId !== ms.id && (
+          <div className="flex gap-2">
+            <button className="btn-primary btn-compact flex-1" onClick={() => onApprove(ms)}>
+              Approve
+            </button>
+            <button className="btn-danger btn-compact flex-1" onClick={() => { setRejectingId(ms.id); setRejectNotes('') }}>
+              Reject
+            </button>
+          </div>
+        )}
+        {ms.status === 'pending' && rejectingId === ms.id && (
+          <div className="space-y-2">
+            <textarea
+              className="input w-full text-sm"
+              rows={2}
+              placeholder={l('meter.rejectNotes', 'Reason for rejection (optional)')}
+              value={rejectNotes}
+              onChange={(e) => setRejectNotes(e.target.value)}
+            />
+            <div className="flex gap-2">
+              <button className="btn-danger btn-compact flex-1" onClick={() => onReject(ms)}>
+                {l('meter.confirm.reject', 'Confirm rejection')}
+              </button>
+              <button className="btn-secondary btn-compact" onClick={() => setRejectingId(null)}>
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   )
 }

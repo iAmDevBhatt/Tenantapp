@@ -1,8 +1,10 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { portalApi } from '@/api/portal'
 import { portalClient } from '@/api/portalClient'
+import { meterSubmissionsApi } from '@/api/meterSubmissions'
 import { Invoice } from '@/types/invoice'
+import { MeterSubmission } from '@/types/meterSubmission'
 import { TenantDocument } from '@/types/tenant'
 import { PortalMe } from '@/types/settings'
 import { formatINR } from '@/utils/formulas'
@@ -18,12 +20,31 @@ function ProfileRow({ label, value }: { label: string; value: string }) {
   )
 }
 
+const PHOTO_TYPE_LABELS: Record<string, string> = {
+  flat_meter: 'Flat Meter',
+  water_meter: 'Water Meter',
+  property: 'Whole Property',
+  other: 'Other',
+}
+
+const STATUS_COLOURS: Record<string, string> = {
+  pending: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300',
+  approved: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300',
+  applied: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300',
+  rejected: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300',
+}
+
 export default function PortalDashboardPage() {
   const [me, setMe] = useState<PortalMe | null>(null)
   const [invoices, setInvoices] = useState<Invoice[]>([])
   const [documents, setDocuments] = useState<TenantDocument[]>([])
   const [photoSrc, setPhotoSrc] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
+  const [submissions, setSubmissions] = useState<MeterSubmission[]>([])
+  const [uploadingType, setUploadingType] = useState<string | null>(null)
+  const flatInputRef = useRef<HTMLInputElement>(null)
+  const waterInputRef = useRef<HTMLInputElement>(null)
+  const propertyInputRef = useRef<HTMLInputElement>(null)
   const { l } = useLabels()
 
   const DOC_TYPE_LABELS: Record<string, string> = {
@@ -36,11 +57,17 @@ export default function PortalDashboardPage() {
 
   useEffect(() => {
     let photoUrl: string | null = null
-    Promise.all([portalApi.me(), portalApi.listInvoices(), portalApi.listDocuments()])
-      .then(async ([m, inv, docs]) => {
+    Promise.all([
+      portalApi.me(),
+      portalApi.listInvoices(),
+      portalApi.listDocuments(),
+      meterSubmissionsApi.listMine(),
+    ])
+      .then(async ([m, inv, docs, subs]) => {
         setMe(m)
         setInvoices(inv)
         setDocuments(docs)
+        setSubmissions(subs)
         if (m.hasProfilePhoto) {
           photoUrl = await fetchAuthedBlob(portalClient, portalApi.profilePhotoUrl())
           setPhotoSrc(photoUrl)
@@ -51,6 +78,16 @@ export default function PortalDashboardPage() {
       if (photoUrl) URL.revokeObjectURL(photoUrl)
     }
   }, [])
+
+  async function handleMeterUpload(file: File, photoType: string) {
+    setUploadingType(photoType)
+    try {
+      const ms = await meterSubmissionsApi.submitPhoto(file, photoType)
+      setSubmissions((prev) => [ms, ...prev])
+    } finally {
+      setUploadingType(null)
+    }
+  }
 
   async function handleDownloadDoc(doc: TenantDocument) {
     const url = await fetchAuthedBlob(portalClient, portalApi.documentDownloadUrl(doc.id))
@@ -143,6 +180,73 @@ export default function PortalDashboardPage() {
             label={l('portal.profile.emergencyContact', 'Emergency contact')}
             value={me.emergencyContactName + (me.emergencyContactPhone ? ` · ${me.emergencyContactPhone}` : '')}
           />
+        )}
+      </div>
+
+      {/* Meter Readings */}
+      <div className="card p-4 sm:p-6 space-y-4">
+        <div>
+          <h2 className="font-semibold">{l('meter.title', 'Meter Readings')}</h2>
+          <p className="text-sm text-slate-500 mt-0.5">{l('meter.subtitle', 'Upload your monthly meter photos')}</p>
+        </div>
+
+        {/* Upload buttons */}
+        <div className="flex flex-wrap gap-2">
+          {[
+            { type: 'flat_meter', label: l('meter.flatMeter', 'Flat Meter'), ref: flatInputRef },
+            { type: 'water_meter', label: l('meter.waterMeter', 'Water Meter'), ref: waterInputRef },
+            { type: 'property', label: l('meter.property', 'Whole Property'), ref: propertyInputRef },
+          ].map(({ type, label, ref }) => (
+            <div key={type}>
+              <input
+                type="file"
+                accept="image/*"
+                capture="environment"
+                className="hidden"
+                ref={ref}
+                onChange={(e) => {
+                  const file = e.target.files?.[0]
+                  if (file) handleMeterUpload(file, type)
+                  e.target.value = ''
+                }}
+              />
+              <button
+                className="btn-secondary btn-compact min-h-[44px]"
+                onClick={() => ref.current?.click()}
+                disabled={uploadingType === type}
+              >
+                {uploadingType === type
+                  ? l('meter.uploading', 'Uploading...')
+                  : `📷 ${label}`}
+              </button>
+            </div>
+          ))}
+        </div>
+
+        {/* Submission history */}
+        {submissions.length === 0 ? (
+          <p className="text-sm text-slate-500">{l('meter.noSubmissions', 'No photos submitted yet')}</p>
+        ) : (
+          <ul className="divide-y divide-slate-200 dark:divide-slate-800">
+            {submissions.map((ms) => (
+              <li key={ms.id} className="py-2 flex items-center justify-between gap-2">
+                <div className="min-w-0">
+                  <p className="text-sm font-medium">{PHOTO_TYPE_LABELS[ms.photoType] ?? ms.photoType}</p>
+                  <p className="text-xs text-slate-500">
+                    {new Date(ms.submittedAt).toLocaleDateString('en-IN', {
+                      day: '2-digit', month: 'short', year: 'numeric',
+                    })}
+                    {ms.notes && ms.status === 'rejected' && (
+                      <span className="ml-1 text-red-500">· {ms.notes}</span>
+                    )}
+                  </p>
+                </div>
+                <span className={`text-xs rounded-full px-2 py-0.5 shrink-0 ${STATUS_COLOURS[ms.status] ?? ''}`}>
+                  {l(`meter.status.${ms.status}`, ms.status)}
+                </span>
+              </li>
+            ))}
+          </ul>
         )}
       </div>
 

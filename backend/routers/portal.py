@@ -1,14 +1,18 @@
-"""Tenant-facing, read-only routes. Every lookup below is scoped through
-tenant.tenant_id (from the verified JWT), never a client-supplied id -- so a
-tenant can never reach another tenant's data even by guessing an invoice id
-(returns 404, not 403, to avoid confirming the id exists at all)."""
-from fastapi import APIRouter, Depends, HTTPException
+"""Tenant-facing routes. All lookups are scoped through tenant.tenant_id from
+the verified JWT -- a tenant can never reach another tenant's data even by
+guessing an id (returns 404, not 403, to avoid confirming the id exists)."""
+import mimetypes
+
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, Response
 from sqlalchemy.orm import Session
 
 from backend.core.deps import get_current_tenant
+from backend.core.limiter import limiter
 from backend.database import get_db
+from backend.models.meter_submission import MeterSubmission
 from backend.models.tenant_user import TenantUser
+from backend.schemas.meter_submission import MeterSubmissionOut
 from backend.schemas.portal import PortalMeOut
 from backend.schemas.invoice import InvoiceOut
 from backend.schemas.invoice_writeoff import WriteOffOut
@@ -87,7 +91,6 @@ def my_profile_photo(tenant_user: TenantUser = Depends(get_current_tenant), db: 
     path = document_service.profile_photo_absolute_path(tenant)
     if not path:
         raise HTTPException(status_code=404, detail="No profile photo")
-    import mimetypes
     mime = mimetypes.guess_type(path)[0] or "image/jpeg"
     return FileResponse(path, media_type=mime)
 
@@ -113,7 +116,6 @@ def download_my_document(doc_id: str, tenant_user: TenantUser = Depends(get_curr
     path = document_service.absolute_path(doc)
     if not path:
         raise HTTPException(status_code=404, detail="File not found on disk")
-    import mimetypes
     mime = doc.content_type or mimetypes.guess_type(doc.original_filename)[0] or "application/octet-stream"
     return FileResponse(path, media_type=mime, filename=doc.original_filename)
 
@@ -155,3 +157,81 @@ def get_my_invoice_qr(
     ctx = build_invoice_view(inv, inv.tenant, settings_service.get_or_create(db))
     png_bytes = qr_service.generate_qr_png_bytes(ctx["qr_uri"])
     return Response(content=png_bytes, media_type="image/png")
+
+
+_VALID_PHOTO_TYPES = {"flat_meter", "water_meter", "property"}
+
+
+def _ms_out(ms: MeterSubmission) -> MeterSubmissionOut:
+    return MeterSubmissionOut(
+        id=ms.id,
+        tenantId=ms.tenant_id,
+        photoType=ms.photo_type,
+        originalFilename=ms.original_filename,
+        contentType=ms.content_type,
+        sizeBytes=ms.size_bytes,
+        submittedAt=ms.submitted_at,
+        status=ms.status,
+        appliedToInvoiceId=ms.applied_to_invoice_id,
+        notes=ms.notes,
+    )
+
+
+@router.post("/meter-submissions", response_model=MeterSubmissionOut)
+@limiter.limit("20/minute")
+def submit_meter_photo(
+    request: Request,
+    photo_type: str = Form(...),
+    file: UploadFile = File(...),
+    tenant_user: TenantUser = Depends(get_current_tenant),
+    db: Session = Depends(get_db),
+):
+    if photo_type not in _VALID_PHOTO_TYPES:
+        raise HTTPException(status_code=422, detail=f"photo_type must be one of {sorted(_VALID_PHOTO_TYPES)}")
+    rel_path, original = document_service.save_meter_submission_file(tenant_user.tenant_id, file)
+    ms = MeterSubmission(
+        tenant_id=tenant_user.tenant_id,
+        photo_path=rel_path,
+        photo_type=photo_type,
+        original_filename=original,
+        content_type=file.content_type,
+        size_bytes=None,  # size tracked inside save_meter_submission_file but not returned; acceptable
+        status="pending",
+    )
+    db.add(ms)
+    db.commit()
+    db.refresh(ms)
+    return _ms_out(ms)
+
+
+@router.get("/meter-submissions", response_model=list[MeterSubmissionOut])
+def list_my_meter_submissions(
+    tenant_user: TenantUser = Depends(get_current_tenant), db: Session = Depends(get_db)
+):
+    rows = (
+        db.query(MeterSubmission)
+        .filter(MeterSubmission.tenant_id == tenant_user.tenant_id)
+        .order_by(MeterSubmission.submitted_at.desc())
+        .all()
+    )
+    return [_ms_out(ms) for ms in rows]
+
+
+@router.get("/invoices/{invoice_id}/meter-photos/{photo_id}")
+def get_invoice_meter_photo(
+    invoice_id: str,
+    photo_id: str,
+    tenant_user: TenantUser = Depends(get_current_tenant),
+    db: Session = Depends(get_db),
+):
+    _owned_invoice_or_404(db, tenant_user, invoice_id)
+    doc = db.query(TenantDocument).filter(
+        TenantDocument.id == photo_id,
+        TenantDocument.invoice_id == invoice_id,
+        TenantDocument.tenant_id == tenant_user.tenant_id,
+    ).first()
+    if not doc:
+        raise HTTPException(status_code=404, detail="Photo not found")
+    path = document_service.absolute_path(doc)
+    mime = doc.content_type or mimetypes.guess_type(doc.original_filename)[0] or "image/jpeg"
+    return FileResponse(path, media_type=mime)

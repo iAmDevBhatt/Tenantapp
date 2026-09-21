@@ -1,13 +1,12 @@
 from decimal import Decimal
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from fastapi.responses import Response
 from sqlalchemy.orm import Session
 
 from backend.core.deps import get_current_admin
 from backend.database import get_db
-from backend.models.admin_user import AdminUser
-from fastapi import UploadFile, File
+from backend.models.meter_submission import MeterSubmission
 from backend.schemas.invoice import InvoiceCreate, InvoiceUpdate, InvoiceOut, TogglePaidRequest, RecordPaymentRequest
 from backend.schemas.invoice_writeoff import WriteOffCreate, WriteOffOut
 from backend.schemas.tenant_document import DocumentOut
@@ -75,6 +74,15 @@ def create_invoice(body: InvoiceCreate, db: Session = Depends(get_db)):
         water_start=body.waterStart, water_end=body.waterEnd, previous_dues=body.previousDues,
         payee_name=settings_row.owner_name, due_days=settings_row.invoice_due_days,
     )
+    for ms_id in body.meterSubmissionIds:
+        ms = db.query(MeterSubmission).filter(
+            MeterSubmission.id == ms_id,
+            MeterSubmission.tenant_id == tenant.id,
+            MeterSubmission.status == "approved",
+            MeterSubmission.applied_to_invoice_id == None,  # noqa: E711
+        ).first()
+        if ms:
+            document_service.save_meter_submission_as_document(db, ms, inv.id)
     return _out(inv, db)
 
 

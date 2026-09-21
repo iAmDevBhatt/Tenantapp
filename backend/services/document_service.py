@@ -143,6 +143,71 @@ def profile_photo_absolute_path(tenant) -> str | None:
     return os.path.join(settings.UPLOADS_DIR, tenant.profile_photo_path)
 
 
+METER_SUBMISSION_SUBDIR = "meter_submissions"
+ALLOWED_IMAGE_TYPES = {"image/jpeg", "image/png", "image/gif", "image/webp"}
+
+
+def _meter_submission_dir(tenant_id: str) -> str:
+    d = os.path.join(settings.UPLOADS_DIR, DOCS_SUBDIR, tenant_id, METER_SUBMISSION_SUBDIR)
+    os.makedirs(d, exist_ok=True)
+    return d
+
+
+def save_meter_submission_file(tenant_id: str, upload: UploadFile) -> tuple[str, str]:
+    """Write a meter photo to disk. Returns (rel_path, original_filename).
+    Does NOT create any DB row — the caller creates the MeterSubmission."""
+    if upload.content_type and upload.content_type not in ALLOWED_IMAGE_TYPES:
+        raise HTTPException(status_code=415, detail="Only image files are accepted for meter photos")
+
+    original = upload.filename or "photo.jpg"
+    ext = os.path.splitext(original)[1] or ".jpg"
+    stored_name = f"{uuid.uuid4()}{ext}"
+    submission_dir = _meter_submission_dir(tenant_id)
+    abs_path = os.path.join(submission_dir, stored_name)
+
+    size = 0
+    try:
+        with open(abs_path, "wb") as f:
+            while chunk := upload.file.read(65536):
+                size += len(chunk)
+                if size > MAX_UPLOAD_BYTES:
+                    raise HTTPException(status_code=413, detail="File too large (20 MB max)")
+                f.write(chunk)
+    except HTTPException:
+        if os.path.exists(abs_path):
+            os.remove(abs_path)
+        raise
+
+    rel_path = os.path.join(DOCS_SUBDIR, tenant_id, METER_SUBMISSION_SUBDIR, stored_name)
+    return rel_path, original
+
+
+def meter_submission_absolute_path(ms) -> str:
+    return os.path.join(settings.UPLOADS_DIR, ms.photo_path)
+
+
+def save_meter_submission_as_document(db: Session, ms, invoice_id: str) -> TenantDocument:
+    """Create a TenantDocument from an approved MeterSubmission and mark it applied."""
+    doc = TenantDocument(
+        tenant_id=ms.tenant_id,
+        filename=os.path.basename(ms.photo_path),
+        original_filename=ms.original_filename,
+        file_path=ms.photo_path,
+        content_type=ms.content_type,
+        size_bytes=ms.size_bytes,
+        doc_type="meter_reading",
+        tenant_visible=False,
+        invoice_id=invoice_id,
+    )
+    db.add(doc)
+    ms.status = "applied"
+    ms.applied_to_invoice_id = invoice_id
+    db.commit()
+    db.refresh(doc)
+    db.refresh(ms)
+    return doc
+
+
 def build_tenant_zip(db: Session, tenant) -> bytes:
     """Return an in-memory zip containing all documents + profile photo."""
     import io

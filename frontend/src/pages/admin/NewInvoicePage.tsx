@@ -2,16 +2,27 @@ import { useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { tenantsApi } from '@/api/tenants'
 import { invoicesApi } from '@/api/invoices'
+import { meterSubmissionsApi } from '@/api/meterSubmissions'
 import { Tenant } from '@/types/tenant'
 import { Invoice } from '@/types/invoice'
+import { MeterSubmission } from '@/types/meterSubmission'
 import { computeInvoicePreview, formatINR } from '@/utils/formulas'
 import { useLabels } from '@/hooks/useLabels'
+
+const PHOTO_TYPE_LABELS: Record<string, string> = {
+  flat_meter: 'Flat Meter',
+  water_meter: 'Water Meter',
+  property: 'Whole Property',
+  other: 'Other',
+}
 
 export default function NewInvoicePage() {
   const { tenantId } = useParams<{ tenantId: string }>()
   const navigate = useNavigate()
   const [tenant, setTenant] = useState<Tenant | null>(null)
   const [blockingInvoice, setBlockingInvoice] = useState<Invoice | null>(null)
+  const [approvedPhotos, setApprovedPhotos] = useState<MeterSubmission[]>([])
+  const [selectedPhotoIds, setSelectedPhotoIds] = useState<string[]>([])
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -31,12 +42,14 @@ export default function NewInvoicePage() {
       tenantsApi.get(tenantId),
       tenantsApi.nextInvoiceDefaults(tenantId),
       invoicesApi.listForTenant(tenantId),
+      meterSubmissionsApi.listForTenant(tenantId, 'approved'),
     ])
-      .then(([t, defaults, invoices]) => {
+      .then(([t, defaults, invoices, photos]) => {
         setTenant(t)
         setRoomStart(defaults.roomStart)
         setWaterStart(defaults.waterStart)
         setPreviousDues(defaults.previousDues)
+        setApprovedPhotos(photos)
 
         // Detect if the most recent invoice blocks creation (no payment, not paid, no write-offs)
         if (invoices.length > 0) {
@@ -47,6 +60,12 @@ export default function NewInvoicePage() {
       })
       .finally(() => setLoading(false))
   }, [tenantId])
+
+  function togglePhoto(id: string) {
+    setSelectedPhotoIds((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
+    )
+  }
 
   const preview = tenant
     ? computeInvoicePreview({
@@ -69,6 +88,7 @@ export default function NewInvoicePage() {
     try {
       const invoice = await invoicesApi.create({
         tenantId, invoiceDate, roomStart, roomEnd, waterStart, waterEnd, previousDues,
+        meterSubmissionIds: selectedPhotoIds,
       })
       navigate(`/invoices/${invoice.id}`)
     } catch (err: any) {
@@ -99,6 +119,49 @@ export default function NewInvoicePage() {
       )}
 
       {error && <div className="rounded-lg bg-red-50 text-red-700 px-3 py-2 text-sm">{error}</div>}
+
+      {/* Meter photo picker */}
+      <div className="card p-4 sm:p-6 space-y-3">
+        <h2 className="font-semibold text-sm">{l('meter.photoPicker', 'Select meter photos to attach')}</h2>
+        {approvedPhotos.length === 0 ? (
+          <p className="text-sm text-slate-500">{l('meter.noApproved', 'No approved meter photos available')}</p>
+        ) : (
+          <div className="flex flex-wrap gap-3">
+            {approvedPhotos.map((ms) => {
+              const selected = selectedPhotoIds.includes(ms.id)
+              return (
+                <button
+                  key={ms.id}
+                  type="button"
+                  onClick={() => togglePhoto(ms.id)}
+                  className={`relative rounded-lg overflow-hidden border-2 transition-colors ${
+                    selected
+                      ? 'border-brand-600 ring-2 ring-brand-300'
+                      : 'border-slate-200 dark:border-slate-700 hover:border-slate-400'
+                  }`}
+                >
+                  <img
+                    src={meterSubmissionsApi.previewPhotoUrl(tenantId!, ms.id)}
+                    alt={ms.originalFilename}
+                    className="w-24 h-24 object-cover"
+                    onError={(e) => {
+                      (e.target as HTMLImageElement).src = ''
+                    }}
+                  />
+                  <div className="absolute bottom-0 left-0 right-0 bg-black/50 text-white text-xs text-center py-0.5 truncate px-1">
+                    {PHOTO_TYPE_LABELS[ms.photoType] ?? ms.photoType}
+                  </div>
+                  {selected && (
+                    <div className="absolute top-1 right-1 w-5 h-5 bg-brand-600 rounded-full flex items-center justify-center text-white text-xs font-bold">
+                      ✓
+                    </div>
+                  )}
+                </button>
+              )
+            })}
+          </div>
+        )}
+      </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <div className="card p-4 sm:p-6 space-y-4">

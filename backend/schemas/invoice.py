@@ -21,6 +21,7 @@ class InvoiceCreate(BaseModel):
     waterStart: Decimal
     waterEnd: Decimal
     previousDues: Decimal = Decimal("0")
+    meterSubmissionIds: list[str] = []
 
 
 class InvoiceUpdate(BaseModel):
