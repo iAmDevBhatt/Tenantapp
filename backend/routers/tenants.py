@@ -87,6 +87,13 @@ def reactivate_tenant(tenant_id: str, db: Session = Depends(get_db)):
     return _tenant_out(tenant_service.reactivate(db, tenant))
 
 
+@router.delete("/{tenant_id}")
+def delete_tenant(tenant_id: str, db: Session = Depends(get_db)):
+    tenant = tenant_service.get_or_404(db, tenant_id)
+    tenant_service.delete_tenant(db, tenant)
+    return {"ok": True}
+
+
 @router.get("/{tenant_id}/next-invoice-defaults", response_model=NextInvoiceDefaults)
 def next_invoice_defaults(tenant_id: str, db: Session = Depends(get_db)):
     tenant = tenant_service.get_or_404(db, tenant_id)

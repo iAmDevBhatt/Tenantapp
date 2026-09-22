@@ -100,6 +100,17 @@ export default function TenantDetailPage() {
     setTenant(await tenantsApi.reactivate(tenantId))
   }
 
+  async function handleDeleteTenant() {
+    if (!tenantId || !tenant) return
+    const message = l(
+      'confirm.deleteTenant',
+      'Permanently delete {name}? This removes all their invoices, documents, photos, and portal login. This cannot be undone.',
+    ).replace('{name}', tenant.name)
+    if (!confirm(message)) return
+    await tenantsApi.delete(tenantId)
+    navigate('/')
+  }
+
   async function handleProfilePhotoUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
     if (!file || !tenantId) return
@@ -153,6 +164,7 @@ export default function TenantDetailPage() {
           ) : (
             <button className="btn-secondary" onClick={handleReactivate}>{l('btn.reactivate', 'Reactivate')}</button>
           )}
+          <button className="btn-danger" onClick={handleDeleteTenant}>{l('btn.deleteTenant', 'Delete tenant')}</button>
         </div>
       </div>
 

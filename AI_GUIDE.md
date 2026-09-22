@@ -57,6 +57,7 @@ Legend: **A** = admin JWT required, **T** = tenant JWT required, **P** = public.
 | GET/PUT | `/api/tenants/{id}` | A | PUT accepts `flatId` |
 | POST | `/api/tenants/{id}/deactivate` | A | `{moveOutDate?}` → soft-delete |
 | POST | `/api/tenants/{id}/reactivate` | A | |
+| DELETE | `/api/tenants/{id}` | A | **hard** delete — tenant, invoices, write-offs, documents, meter submissions, portal account, invites, and all uploaded files, permanently. Distinct from `deactivate`. |
 | GET | `/api/tenants/{id}/next-invoice-defaults` | A | `{roomStart, waterStart, previousDues}` — see §6 |
 | GET/POST | `/api/tenants/{id}/documents` | A | list / multipart upload |
 | GET | `/api/tenants/{id}/documents/{doc_id}/download` | A | streams file |

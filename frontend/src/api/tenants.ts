@@ -43,4 +43,6 @@ export const tenantsApi = {
 
   resetPortalPassword: (tenantId: string) =>
     adminClient.post<{ password: string }>(`/tenants/${tenantId}/portal-account/reset-password`).then((r) => r.data),
+
+  delete: (id: string) => adminClient.delete(`/tenants/${id}`),
 }

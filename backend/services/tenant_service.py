@@ -1,11 +1,17 @@
+import os
 import secrets
+import shutil
 from datetime import date
 
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
+from backend.core.config import settings
 from backend.core.security import hash_password
+from backend.models.invoice import Invoice
+from backend.models.meter_submission import MeterSubmission
 from backend.models.tenant import Tenant
+from backend.models.tenant_document import TenantDocument
 
 
 def get_or_404(db: Session, tenant_id: str) -> Tenant:
@@ -57,6 +63,27 @@ def reactivate(db: Session, tenant: Tenant) -> Tenant:
     db.commit()
     db.refresh(tenant)
     return tenant
+
+
+def delete_tenant(db: Session, tenant: Tenant) -> None:
+    """Permanently deletes a tenant and everything tied to it: meter
+    submissions, documents (incl. meter-reading photos), invoices (+
+    write-offs via ORM cascade), the portal account and invites (ORM
+    cascade off Tenant), and every uploaded file on disk. Irreversible --
+    unlike `deactivate`, no history survives. Deletion order respects FK
+    constraints (SQLite has foreign_keys=ON): rows that reference an
+    invoice must go before the invoice itself."""
+    tenant_id = tenant.id
+
+    db.query(MeterSubmission).filter(MeterSubmission.tenant_id == tenant_id).delete()
+    db.query(TenantDocument).filter(TenantDocument.tenant_id == tenant_id).delete()
+    for invoice in db.query(Invoice).filter(Invoice.tenant_id == tenant_id).all():
+        db.delete(invoice)  # cascades invoice_writeoffs
+
+    db.delete(tenant)  # cascades tenant_user, invites; documents already cleared
+    db.commit()
+
+    shutil.rmtree(os.path.join(settings.UPLOADS_DIR, "tenants", tenant_id), ignore_errors=True)
 
 
 def delete_portal_account(db: Session, tenant: Tenant) -> Tenant:
