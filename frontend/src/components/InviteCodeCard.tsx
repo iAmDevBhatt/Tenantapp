@@ -111,6 +111,12 @@ export default function InviteCodeCard({ tenantId, tenant, onTenantUpdated }: Pr
         <p className="text-sm text-slate-600 dark:text-slate-400">
           {l('invite.alreadyRegistered', 'This tenant already has a portal login. They can sign in at /portal/login.')}
         </p>
+        {tenant?.portalUsername && (
+          <p className="text-sm">
+            {l('invite.username', 'Username')}:{' '}
+            <strong className="font-mono">{tenant.portalUsername}</strong>
+          </p>
+        )}
         <div className="flex items-center gap-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 px-4 py-3">
           <div className="flex-1">
             <p className="text-sm font-medium">

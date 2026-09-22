@@ -57,6 +57,7 @@ class TenantOut(BaseModel):
     moveInDate: date
     moveOutDate: date | None
     hasPortalAccount: bool = False
+    portalUsername: str | None = None
     hasProfilePhoto: bool = False
     portalAccessBlocked: bool = False
     flatId: str | None = None

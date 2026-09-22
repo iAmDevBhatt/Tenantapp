@@ -113,6 +113,24 @@ def test_payment_receipt_pdf_or_501(client, admin_headers):
         assert receipt.headers["content-type"] == "application/pdf"
 
 
+def test_payee_name_reflects_current_settings_not_creation_time(client, admin_headers):
+    tenant = make_tenant(client, admin_headers, name="Payee Name Tenant")
+    original = client.get("/api/settings", headers=admin_headers).json()["ownerName"]
+    try:
+        set1 = client.put("/api/settings", json={"ownerName": "Old Owner"}, headers=admin_headers)
+        assert set1.status_code == 200, set1.text
+        invoice = make_invoice(client, admin_headers, tenant["id"])
+        assert invoice["payeeName"] == "Old Owner"
+
+        set2 = client.put("/api/settings", json={"ownerName": "New Owner"}, headers=admin_headers)
+        assert set2.status_code == 200, set2.text
+
+        refetched = client.get(f"/api/invoices/{invoice['id']}", headers=admin_headers).json()
+        assert refetched["payeeName"] == "New Owner"  # live, not frozen at creation
+    finally:
+        client.put("/api/settings", json={"ownerName": original}, headers=admin_headers)
+
+
 def test_legacy_amount_paid_backfills_once(client, admin_headers):
     tenant = make_tenant(client, admin_headers, name="Legacy Backfill Tenant")
     invoice = make_invoice(client, admin_headers, tenant["id"])

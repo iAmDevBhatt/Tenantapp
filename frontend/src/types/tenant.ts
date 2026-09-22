@@ -12,6 +12,7 @@ export interface Tenant {
   moveInDate: string
   moveOutDate: string | null
   hasPortalAccount: boolean
+  portalUsername: string | null
   hasProfilePhoto: boolean
   portalAccessBlocked: boolean
   flatId: string | null

@@ -10,6 +10,7 @@ import { PortalMe } from '@/types/settings'
 import { formatINR } from '@/utils/formulas'
 import { fetchAuthedBlob, triggerBlobDownload } from '@/utils/blob'
 import PhotoLightbox from '@/components/PhotoLightbox'
+import InstallPrompt from '@/components/InstallPrompt'
 import { useLabels } from '@/hooks/useLabels'
 
 function ProfileRow({ label, value }: { label: string; value: string }) {
@@ -116,6 +117,8 @@ export default function PortalDashboardPage() {
 
   return (
     <div className="space-y-6">
+
+      <InstallPrompt />
 
       {/* Greeting */}
       <div className="flex items-center justify-between flex-wrap gap-2">

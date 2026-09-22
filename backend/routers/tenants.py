@@ -26,6 +26,7 @@ def _tenant_out(t) -> TenantOut:
         waterDivisor=t.water_divisor, upiId=t.upi_id, active=t.active,
         moveInDate=t.move_in_date, moveOutDate=t.move_out_date,
         hasPortalAccount=t.tenant_user is not None,
+        portalUsername=t.tenant_user.username if t.tenant_user else None,
         hasProfilePhoto=bool(t.profile_photo_path),
         portalAccessBlocked=bool(t.tenant_user and t.tenant_user.portal_access_blocked),
         flatId=t.flat_id,

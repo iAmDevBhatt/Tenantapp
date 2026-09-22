@@ -213,6 +213,9 @@ export default function TenantDetailPage() {
                 <Field label={l('field.waterRate', 'Water Rate')} value={`${formatINR(tenant.waterRate)}/unit`} />
                 <Field label={l('field.waterSharedBy', 'Water Shared By')} value={String(tenant.waterDivisor)} />
                 <Field label={l('field.upiId', 'UPI ID')} value={tenant.upiId || '—'} />
+                {tenant.portalUsername && (
+                  <Field label={l('invite.username', 'Username')} value={tenant.portalUsername} />
+                )}
                 <Field label={l('field.moveInDate', 'Move-in Date')} value={tenant.moveInDate} />
                 {tenant.moveOutDate && <Field label={l('field.moveOutDate', 'Move-out Date')} value={tenant.moveOutDate} />}
                 {tenant.permanentAddress && (

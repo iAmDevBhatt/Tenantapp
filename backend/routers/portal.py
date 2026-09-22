@@ -52,18 +52,22 @@ def _out(inv, db=None) -> InvoiceOut:
         for p in inv.payments
     ]
     meter_photos = []
+    payee_name = inv.payee_name  # fallback if db wasn't passed (shouldn't normally happen)
     if db is not None:
         meter_photos = [
             _doc_out(d) for d in db.query(TenantDocument).filter(
                 TenantDocument.invoice_id == inv.id
             ).order_by(TenantDocument.uploaded_at).all()
         ]
+        # Owner name always reflects current Settings -- see the matching
+        # comment in routers/invoices.py::_out.
+        payee_name = settings_service.get_or_create(db).owner_name
     return InvoiceOut(
         id=inv.id, tenantId=inv.tenant_id, invoiceDate=inv.invoice_date,
         roomStart=inv.room_start, roomEnd=inv.room_end, waterStart=inv.water_start,
         waterEnd=inv.water_end, previousDues=inv.previous_dues,
         roomRate=inv.room_rate, waterRate=inv.water_rate, waterDivisor=inv.water_divisor,
-        monthlyRent=inv.monthly_rent, upiId=inv.upi_id, payeeName=inv.payee_name, dueDays=inv.due_days,
+        monthlyRent=inv.monthly_rent, upiId=inv.upi_id, payeeName=payee_name, dueDays=inv.due_days,
         roomUsage=inv.room_usage, waterUsage=inv.water_usage, roomAmount=inv.room_amount,
         waterAmount=inv.water_amount, totalPayable=inv.total_payable,
         paid=inv.paid, paidDate=inv.paid_date, createdAt=inv.created_at,

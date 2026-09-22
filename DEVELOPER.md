@@ -187,6 +187,8 @@ See README's Quick Start. Key facts: two-stage build (`node:20-alpine` → `pyth
 
 `frontend/vite.config.ts` — `vite-plugin-pwa`, `registerType: autoUpdate`, manifest with 192/512/512-maskable icons (placeholder icons under `frontend/public/icons/` — replace with real branding art before shipping to tenants). `NetworkFirst` runtime caching for `/api/*`. `workbox.navigateFallback` is explicitly set to `undefined` — the plugin's default (`'index.html'`) precaches a `NavigationRoute` that serves the app shell for every hard navigation from cache, which can strand a browser on a stale build indefinitely after a redeploy. Don't re-enable it.
 
+`frontend/src/components/InstallPrompt.tsx` nudges the tenant to install the PWA, shown once on `PortalDashboardPage` after login. Android/Chrome gets a real one-tap install via `beforeinstallprompt`; iOS Safari has no install API at all (Apple never implemented it), so it just shows static "tap Share → Add to Home Screen" instructions. Dismissal is remembered per-device via `safeStorage` (`localStorage`), and the banner never shows at all if `display-mode: standalone`/`navigator.standalone` says the app is already installed.
+
 ## Security Notes
 
 - `JWT_SECRET` has no committed fallback — `backend/main.py` raises on boot if it's empty or the literal placeholder `"change-me"`.

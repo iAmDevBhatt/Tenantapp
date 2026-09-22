@@ -4,7 +4,10 @@ field used here comes only from the Invoice row's own snapshot columns
 identically regardless of later rate changes on the tenant record. `tenant`
 is passed in solely for stable identity fields (name, address, phone) that
 are expected to reflect current data (e.g. a corrected spelling), never for
-billing numbers."""
+billing numbers. The one deliberate exception is the owner/payee name: it's
+an identity label, not a billing input, so it always reflects the current
+`AppSettings.owner_name` rather than `Invoice.payee_name`'s frozen value --
+see the matching comment in routers/invoices.py::_out."""
 import base64
 import os
 
@@ -48,7 +51,7 @@ def build_invoice_view(invoice: Invoice, tenant: Tenant, app_settings: AppSettin
     """Shared data-shaping used by both the PDF template and the QR-only
     endpoint, so the QR content is always derived from the same snapshot
     fields the PDF renders."""
-    qr_uri = build_upi_uri(invoice.upi_id or "", invoice.payee_name or "", invoice.total_payable)
+    qr_uri = build_upi_uri(invoice.upi_id or "", app_settings.owner_name or "", invoice.total_payable)
     due_date = None
     return {
         "invoice": invoice,
@@ -85,6 +88,7 @@ def render_invoice_pdf(invoice: Invoice, tenant: Tenant, app_settings: AppSettin
         invoice=invoice,
         tenant=tenant,
         settings=app_settings,
+        owner_name=app_settings.owner_name,
         qr_data_uri=qr_data_uri,
         property_photo_data_uri=property_photo_data_uri,
         meter_photo_data_uris=meter_photo_data_uris,
@@ -113,7 +117,7 @@ def render_payment_receipt_pdf(payment: InvoicePayment, invoice: Invoice, tenant
         invoice=invoice,
         tenant=tenant,
         settings=app_settings,
-        payee_name=invoice.payee_name,
+        payee_name=app_settings.owner_name,
         proof_photo_data_uri=proof_photo_data_uri,
         net_payable=invoice_service.net_payable(invoice),
         total_paid=invoice_service.total_paid(invoice),
