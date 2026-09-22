@@ -104,4 +104,4 @@ def test_legacy_amount_paid_backfills_once(client, admin_headers):
     data = resp.json()
     assert len(data["payments"]) == 1
     assert data["payments"][0]["amount"] == "25.00"
-    assert data["payments"][0]["notes"] == "Migrated from the previous single amount-received field"
+    assert data["payments"][0]["notes"] is None

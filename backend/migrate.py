@@ -56,14 +56,13 @@ def _backfill_legacy_payments(conn: Connection) -> None:
             text(
                 "INSERT INTO invoice_payments "
                 "(id, invoice_id, amount, paid_date, method, notes, recorded_by, created_at) "
-                "VALUES (:id, :invoice_id, :amount, :paid_date, NULL, :notes, NULL, :created_at)"
+                "VALUES (:id, :invoice_id, :amount, :paid_date, NULL, NULL, NULL, :created_at)"
             ),
             {
                 "id": str(uuid.uuid4()),
                 "invoice_id": inv_id,
                 "amount": amount_paid,
                 "paid_date": paid_date or fallback_date,
-                "notes": "Migrated from the previous single amount-received field",
                 "created_at": datetime.utcnow(),
             },
         )
@@ -90,6 +89,13 @@ def run_migrations() -> None:
         _add_column_if_missing(conn, "invoices", "amount_paid", "NUMERIC(10,2)")
         # R10: migrate legacy amount_paid values into the invoice_payments ledger
         _backfill_legacy_payments(conn)
+        # R11: an earlier version of the R10 backfill stamped a "Migrated from..."
+        # sentence into `notes`, which then showed up on the payment receipt PDF as
+        # if it were a real note. Clear it -- idempotent, matches nothing once run.
+        conn.execute(text(
+            "UPDATE invoice_payments SET notes = NULL "
+            "WHERE notes = 'Migrated from the previous single amount-received field'"
+        ))
         # R7: landlord controls which documents are visible to the tenant
         _add_column_if_missing(conn, "tenant_documents", "tenant_visible", "INTEGER NOT NULL DEFAULT 0")
         # R8: landlord can block portal access temporarily (or on move-out)
