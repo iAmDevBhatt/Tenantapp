@@ -10,6 +10,7 @@ from backend.models.meter_submission import MeterSubmission
 from backend.schemas.meter_submission import MeterSubmissionOut, ReviewRequest
 from backend.schemas.tenant import (
     TenantCreate, TenantUpdate, TenantOut, DeactivateRequest, NextInvoiceDefaults,
+    PortalPasswordResetOut,
 )
 from backend.schemas.tenant_document import DocumentOut
 from backend.schemas.invite import InviteOut, InviteStatus
@@ -203,6 +204,20 @@ def toggle_portal_block(tenant_id: str, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(tenant)
     return _tenant_out(tenant)
+
+
+@router.delete("/{tenant_id}/portal-account", response_model=TenantOut)
+def delete_portal_account(tenant_id: str, db: Session = Depends(get_db)):
+    tenant = tenant_service.get_or_404(db, tenant_id)
+    tenant = tenant_service.delete_portal_account(db, tenant)
+    return _tenant_out(tenant)
+
+
+@router.post("/{tenant_id}/portal-account/reset-password", response_model=PortalPasswordResetOut)
+def reset_portal_password(tenant_id: str, db: Session = Depends(get_db)):
+    tenant = tenant_service.get_or_404(db, tenant_id)
+    password = tenant_service.reset_portal_password(db, tenant)
+    return PortalPasswordResetOut(password=password)
 
 
 # --- Invite ---

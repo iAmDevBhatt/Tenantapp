@@ -68,6 +68,10 @@ class TenantOut(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class PortalPasswordResetOut(BaseModel):
+    password: str
+
+
 class NextInvoiceDefaults(BaseModel):
     roomStart: Decimal
     waterStart: Decimal

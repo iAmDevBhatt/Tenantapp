@@ -16,6 +16,10 @@ export default function InviteCodeCard({ tenantId, tenant, onTenantUpdated }: Pr
   const [loading, setLoading] = useState(true)
   const [copied, setCopied] = useState(false)
   const [blocking, setBlocking] = useState(false)
+  const [resetting, setResetting] = useState(false)
+  const [deleting, setDeleting] = useState(false)
+  const [newPassword, setNewPassword] = useState<string | null>(null)
+  const [passwordCopied, setPasswordCopied] = useState(false)
   const { l } = useLabels()
   const { appOrigin } = useAppConfig()
 
@@ -63,6 +67,41 @@ export default function InviteCodeCard({ tenantId, tenant, onTenantUpdated }: Pr
     }
   }
 
+  async function handleResetPassword() {
+    setResetting(true)
+    try {
+      const { password } = await tenantsApi.resetPortalPassword(tenantId)
+      setNewPassword(password)
+      setPasswordCopied(false)
+    } finally {
+      setResetting(false)
+    }
+  }
+
+  async function handleCopyPassword() {
+    if (!newPassword) return
+    try {
+      await navigator.clipboard.writeText(newPassword)
+      setPasswordCopied(true)
+      setTimeout(() => setPasswordCopied(false), 2000)
+    } catch {
+      // clipboard may be unavailable (non-HTTPS, permissions)
+    }
+  }
+
+  async function handleDeleteAccount() {
+    if (!confirm(l('confirm.deletePortalAccount', "Delete this tenant's portal login? They will need to register again with a new invite link."))) return
+    setDeleting(true)
+    try {
+      const updated = await tenantsApi.deletePortalAccount(tenantId)
+      setNewPassword(null)
+      onTenantUpdated?.(updated)
+      await load()
+    } finally {
+      setDeleting(false)
+    }
+  }
+
   if (loading) return <p className="text-sm text-slate-500">{l('status.loading', 'Loading…')}</p>
 
   if (status?.hasRegistered) {
@@ -96,6 +135,34 @@ export default function InviteCodeCard({ tenantId, tenant, onTenantUpdated }: Pr
               : isBlocked
                 ? l('btn.unblockAccess', 'Unblock access')
                 : l('btn.blockAccess', 'Block access')}
+          </button>
+        </div>
+
+        {newPassword && (
+          <div className="rounded-lg border border-amber-200 dark:border-amber-700 bg-amber-50 dark:bg-amber-900/20 px-4 py-3 space-y-2">
+            <p className="text-sm font-medium text-amber-800 dark:text-amber-300">
+              {l('invite.newPassword', 'New password')}
+            </p>
+            <div className="rounded-lg bg-white dark:bg-slate-800 px-3 py-2 text-sm font-mono break-all">
+              {newPassword}
+            </div>
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-xs text-amber-700 dark:text-amber-400">
+                {l('invite.newPasswordNote', "Copy and share this now — it won't be shown again.")}
+              </p>
+              <button className="btn-secondary btn-compact shrink-0" onClick={handleCopyPassword}>
+                {passwordCopied ? l('btn.copied', 'Copied!') : l('btn.copyPassword', 'Copy password')}
+              </button>
+            </div>
+          </div>
+        )}
+
+        <div className="flex flex-wrap gap-2">
+          <button className="btn-secondary btn-compact" onClick={handleResetPassword} disabled={resetting}>
+            {resetting ? l('btn.saving', 'Saving…') : l('btn.resetPassword', 'Reset password')}
+          </button>
+          <button className="btn-danger btn-compact" onClick={handleDeleteAccount} disabled={deleting}>
+            {deleting ? l('btn.saving', 'Saving…') : l('btn.deletePortalAccount', 'Delete portal account')}
           </button>
         </div>
       </div>

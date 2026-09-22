@@ -37,4 +37,10 @@ export const tenantsApi = {
 
   togglePortalBlock: (tenantId: string) =>
     adminClient.patch<Tenant>(`/tenants/${tenantId}/portal-block`).then((r) => r.data),
+
+  deletePortalAccount: (tenantId: string) =>
+    adminClient.delete<Tenant>(`/tenants/${tenantId}/portal-account`).then((r) => r.data),
+
+  resetPortalPassword: (tenantId: string) =>
+    adminClient.post<{ password: string }>(`/tenants/${tenantId}/portal-account/reset-password`).then((r) => r.data),
 }

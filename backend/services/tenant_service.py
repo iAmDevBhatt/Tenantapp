@@ -1,8 +1,10 @@
+import secrets
 from datetime import date
 
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
+from backend.core.security import hash_password
 from backend.models.tenant import Tenant
 
 
@@ -55,3 +57,21 @@ def reactivate(db: Session, tenant: Tenant) -> Tenant:
     db.commit()
     db.refresh(tenant)
     return tenant
+
+
+def delete_portal_account(db: Session, tenant: Tenant) -> Tenant:
+    if not tenant.tenant_user:
+        raise HTTPException(status_code=400, detail="This tenant has no portal account.")
+    db.delete(tenant.tenant_user)
+    db.commit()
+    db.refresh(tenant)
+    return tenant
+
+
+def reset_portal_password(db: Session, tenant: Tenant) -> str:
+    if not tenant.tenant_user:
+        raise HTTPException(status_code=400, detail="This tenant has no portal account.")
+    new_password = secrets.token_urlsafe(9)  # same pattern as invite_service.generate_invite
+    tenant.tenant_user.password_hash = hash_password(new_password)
+    db.commit()
+    return new_password
