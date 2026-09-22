@@ -1,5 +1,6 @@
 import { FormEvent, useEffect, useRef, useState } from 'react'
 import { adminClient } from '@/api/adminClient'
+import { errorMessage } from '@/api/client'
 import { settingsApi } from '@/api/settings'
 import { authApi } from '@/api/auth'
 import { AppSettings } from '@/types/settings'
@@ -77,7 +78,7 @@ export default function SettingsPage() {
       setCurrentPassword('')
       setNewPassword('')
     } catch (err: any) {
-      setPwError(err?.response?.data?.detail || l('error.changePassword', 'Could not change password'))
+      setPwError(errorMessage(err, l('error.changePassword', 'Could not change password')))
     }
   }
 

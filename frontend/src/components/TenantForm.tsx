@@ -2,6 +2,7 @@ import { FormEvent, useEffect, useState } from 'react'
 import { TenantInput } from '@/types/tenant'
 import { Property } from '@/types/property'
 import { propertiesApi } from '@/api/properties'
+import { errorMessage } from '@/api/client'
 import { useLabels } from '@/hooks/useLabels'
 
 interface Props {
@@ -69,7 +70,7 @@ export default function TenantForm({ initial, submitLabel, onSubmit, onCancel }:
     try {
       await onSubmit(form)
     } catch (err: any) {
-      setError(err?.response?.data?.detail || l('error.generic', 'Something went wrong'))
+      setError(errorMessage(err, l('error.generic', 'Something went wrong')))
     } finally {
       setSaving(false)
     }

@@ -1,6 +1,7 @@
 import { FormEvent, useEffect, useState } from 'react'
 import { Navigate, useNavigate, useSearchParams } from 'react-router-dom'
 import { portalAuthApi } from '@/api/portalAuth'
+import { errorMessage } from '@/api/client'
 import { useTenantAuth } from '@/hooks/useAuth'
 import { useLabels } from '@/hooks/useLabels'
 
@@ -46,7 +47,7 @@ export default function PortalRegisterPage() {
       await register(code, username, password)
       navigate('/portal')
     } catch (err: any) {
-      setError(err?.response?.data?.detail || l('error.createAccount', 'Could not create your account'))
+      setError(errorMessage(err, l('error.createAccount', 'Could not create your account')))
     } finally {
       setLoading(false)
     }
@@ -82,11 +83,27 @@ export default function PortalRegisterPage() {
             {error && <div className="rounded-lg bg-red-50 text-red-700 px-3 py-2 text-sm">{error}</div>}
             <div>
               <label className="field-label">{l('form.label.chooseUsername', 'Choose a username')}</label>
-              <input className="field-input" required autoFocus value={username} onChange={(e) => setUsername(e.target.value)} />
+              <input
+                className="field-input"
+                required
+                autoFocus
+                minLength={3}
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+              />
+              <p className="text-xs text-slate-500 mt-1">{l('form.hint.username', 'At least 3 characters.')}</p>
             </div>
             <div>
               <label className="field-label">{l('form.label.choosePassword', 'Choose a password')}</label>
-              <input className="field-input" type="password" required minLength={8} value={password} onChange={(e) => setPassword(e.target.value)} />
+              <input
+                className="field-input"
+                type="password"
+                required
+                minLength={8}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+              />
+              <p className="text-xs text-slate-500 mt-1">{l('form.hint.password', 'At least 8 characters.')}</p>
             </div>
             <button type="submit" className="btn-primary w-full" disabled={loading}>
               {loading ? l('btn.creatingAccount', 'Creating account…') : l('btn.createAccount', 'Create Account')}

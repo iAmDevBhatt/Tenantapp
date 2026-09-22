@@ -33,9 +33,19 @@ export function createApiClient(tokenKey: string, loginPath: string, redirectOn4
   return instance
 }
 
-export function errorMessage(err: unknown): string {
+/** FastAPI returns `detail` as a plain string for business-logic errors (400/404/...)
+ * but as an array of {loc,msg,type} objects for Pydantic validation failures (422).
+ * Rendering that array directly as a React child throws, so this always normalizes
+ * to a string. */
+export function errorMessage(err: unknown, fallback = 'Something went wrong'): string {
   if (axios.isAxiosError(err)) {
-    return err.response?.data?.detail || err.message
+    const detail = err.response?.data?.detail
+    if (typeof detail === 'string' && detail) return detail
+    if (Array.isArray(detail)) {
+      const msgs = detail.map((d) => (d && typeof d === 'object' ? d.msg : null)).filter(Boolean)
+      if (msgs.length) return msgs.join(', ')
+    }
+    return err.message || fallback
   }
-  return String(err)
+  return fallback
 }

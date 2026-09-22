@@ -1,6 +1,7 @@
 import { FormEvent, useEffect, useRef, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { adminClient } from '@/api/adminClient'
+import { errorMessage } from '@/api/client'
 import { invoicesApi } from '@/api/invoices'
 import { tenantsApi } from '@/api/tenants'
 import { settingsApi } from '@/api/settings'
@@ -367,7 +368,7 @@ function WriteOffForm({ invoiceId, netPayable, onAdded, l }: WriteOffFormProps) 
       setAmount('')
       setReason('')
     } catch (err: any) {
-      setError(err?.response?.data?.detail || l('error.generic', 'Something went wrong'))
+      setError(errorMessage(err, l('error.generic', 'Something went wrong')))
     } finally {
       setSaving(false)
     }
@@ -428,7 +429,7 @@ function RecordPaymentForm({ netPayable, currentAmountPaid, onSaved, l }: Record
     try {
       await onSaved(amt)
     } catch (err: any) {
-      setError(err?.response?.data?.detail || l('error.generic', 'Something went wrong'))
+      setError(errorMessage(err, l('error.generic', 'Something went wrong')))
     } finally {
       setSaving(false)
     }

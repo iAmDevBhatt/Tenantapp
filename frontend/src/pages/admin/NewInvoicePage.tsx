@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { tenantsApi } from '@/api/tenants'
+import { errorMessage } from '@/api/client'
 import { invoicesApi } from '@/api/invoices'
 import { meterSubmissionsApi } from '@/api/meterSubmissions'
 import { Tenant } from '@/types/tenant'
@@ -92,8 +93,7 @@ export default function NewInvoicePage() {
       })
       navigate(`/invoices/${invoice.id}`)
     } catch (err: any) {
-      const detail = err?.response?.data?.detail || l('error.saveInvoice', 'Could not save invoice')
-      setError(detail)
+      setError(errorMessage(err, l('error.saveInvoice', 'Could not save invoice')))
     } finally {
       setSaving(false)
     }
