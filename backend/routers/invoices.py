@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 
 from backend.core.deps import get_current_admin
 from backend.database import get_db
+from backend.models.admin_user import AdminUser
 from backend.models.meter_submission import MeterSubmission
 from backend.schemas.invoice import InvoiceCreate, InvoiceUpdate, InvoiceOut, TogglePaidRequest, RecordPaymentRequest
 from backend.schemas.invoice_writeoff import WriteOffCreate, WriteOffOut
