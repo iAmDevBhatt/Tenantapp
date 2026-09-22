@@ -84,9 +84,12 @@ Legend: **A** = admin JWT required, **T** = tenant JWT required, **P** = public.
 | GET | `/api/invoices/{id}/qr.png` | A | `image/png` |
 | POST | `/api/invoices/{id}/writeoffs` | A | `{amount, reason}` — amount must be > 0 and ≤ netPayable; only on unpaid invoices |
 | DELETE | `/api/invoices/{id}/writeoffs/{wid}` | A | undo a write-off |
-| POST | `/api/invoices/{id}/payments` | A | `{amount, paidDate?, method?, notes?}` — adds one payment row (additive, never overwrites); 0 < amount ≤ outstanding |
-| DELETE | `/api/invoices/{id}/payments/{pid}` | A | delete a mistaken payment entry |
-| GET | `/api/invoices/{id}/payments/{pid}/receipt.pdf` | A | payment receipt PDF, or `501` if WeasyPrint libs missing |
+| POST | `/api/invoices/{id}/payments` | A | `{amount, paidDate?, method?, notes?, paymentProofId?}` — adds one payment row (additive, never overwrites); 0 < amount ≤ outstanding; auto-marks `paid=True` if this fully covers it |
+| DELETE | `/api/invoices/{id}/payments/{pid}` | A | delete a mistaken payment entry; reverts any attached payment proof back to `approved` |
+| GET | `/api/invoices/{id}/payments/{pid}/receipt.pdf` | A | payment receipt PDF (embeds the attached payment-proof photo if any), or `501` if WeasyPrint libs missing |
+| GET | `/api/invoices/{id}/payment-proofs` | A | list payment-proof screenshots submitted for this invoice |
+| GET | `/api/invoices/{id}/payment-proofs/{pid}/photo` | A | stream the raw uploaded screenshot |
+| POST | `/api/invoices/{id}/payment-proofs/{pid}/review` | A | body: `{action: "approve"\|"reject", notes?: str}`; 409 if not `pending` |
 | POST | `/api/invoices/{id}/photos` | A | multipart upload — max 3 per invoice; saves as `doc_type="meter_reading"` with `invoice_id` set |
 | DELETE | `/api/invoices/{id}/photos/{photo_id}` | A | delete a meter reading photo |
 | GET | `/api/portal/me` | T | own tenant profile (name, address, rates, contact, photo flag) |
@@ -98,6 +101,9 @@ Legend: **A** = admin JWT required, **T** = tenant JWT required, **P** = public.
 | GET | `/api/portal/invoices/{id}/pdf` | T | same scoping + same renderer as admin |
 | GET | `/api/portal/invoices/{id}/qr.png` | T | same scoping |
 | GET | `/api/portal/invoices/{invoice_id}/payments/{payment_id}/receipt.pdf` | T | read-only; own invoice's own payment only, scoped via `_owned_invoice_or_404` |
+| POST | `/api/portal/invoices/{invoice_id}/payment-proofs` | T | multipart `file`; image-only, 20 MB cap, rate-limited 20/min; creates a `pending` proof for this invoice |
+| GET | `/api/portal/invoices/{invoice_id}/payment-proofs` | T | list tenant's own proofs for this invoice |
+| GET | `/api/portal/invoices/{invoice_id}/payment-proofs/{pid}/photo` | T | stream own proof photo |
 | POST | `/api/portal/meter-submissions` | T | multipart: `file` + `photo_type` (Form); validates type in `{flat_meter,water_meter,property}`; image-only MIME; 20 MB cap; rate-limited 20/min; returns `MeterSubmissionOut` |
 | GET | `/api/portal/meter-submissions` | T | list tenant's own submissions, newest first; returns `list[MeterSubmissionOut]` |
 | GET | `/api/portal/meter-submissions/{ms_id}/photo` | T | stream the raw uploaded file for one of the tenant's own submissions (any status); `FileResponse` |

@@ -103,12 +103,18 @@ def render_payment_receipt_pdf(payment: InvoicePayment, invoice: Invoice, tenant
             "system libraries or run via Docker/WSL -- see DEVELOPER.md"
         )
 
+    proof_photo_data_uri = None
+    if payment.proof and payment.proof.status == "applied":
+        abs_path = os.path.join(settings.UPLOADS_DIR, payment.proof.photo_path)
+        proof_photo_data_uri = _read_data_uri(abs_path)
+
     html_str = _jinja_env.get_template("receipt.html").render(
         payment=payment,
         invoice=invoice,
         tenant=tenant,
         settings=app_settings,
         payee_name=invoice.payee_name,
+        proof_photo_data_uri=proof_photo_data_uri,
         net_payable=invoice_service.net_payable(invoice),
         total_paid=invoice_service.total_paid(invoice),
         outstanding=invoice_service.outstanding(invoice),

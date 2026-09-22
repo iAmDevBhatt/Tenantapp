@@ -1,16 +1,19 @@
+import mimetypes
 from decimal import Decimal
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
-from fastapi.responses import Response
+from fastapi.responses import FileResponse, Response
 from sqlalchemy.orm import Session
 
 from backend.core.deps import get_current_admin
 from backend.database import get_db
 from backend.models.admin_user import AdminUser
 from backend.models.meter_submission import MeterSubmission
+from backend.models.payment_proof import PaymentProof
 from backend.schemas.invoice import InvoiceCreate, InvoiceUpdate, InvoiceOut, TogglePaidRequest
 from backend.schemas.invoice_writeoff import WriteOffCreate, WriteOffOut
 from backend.schemas.invoice_payment import PaymentCreate, PaymentOut
+from backend.schemas.payment_proof import PaymentProofOut, PaymentProofReviewRequest
 from backend.schemas.tenant_document import DocumentOut
 from backend.models.tenant_document import TenantDocument
 from backend.services import invoice_service, tenant_service, settings_service, qr_service, document_service
@@ -130,8 +133,53 @@ def add_payment(
     inv = invoice_service.get_or_404(db, invoice_id)
     inv = invoice_service.add_payment(
         db, inv, body.amount, body.paidDate, body.method, body.notes, current_admin.username,
+        payment_proof_id=body.paymentProofId,
     )
     return _out(inv, db)
+
+
+def _proof_out(p: PaymentProof) -> PaymentProofOut:
+    return PaymentProofOut(
+        id=p.id, tenantId=p.tenant_id, invoiceId=p.invoice_id,
+        originalFilename=p.original_filename, contentType=p.content_type, sizeBytes=p.size_bytes,
+        submittedAt=p.submitted_at, status=p.status, notes=p.notes,
+        appliedToPaymentId=p.applied_to_payment_id,
+    )
+
+
+@router.get("/{invoice_id}/payment-proofs", response_model=list[PaymentProofOut])
+def list_payment_proofs(invoice_id: str, db: Session = Depends(get_db)):
+    inv = invoice_service.get_or_404(db, invoice_id)
+    return [_proof_out(p) for p in inv.payment_proofs]
+
+
+@router.get("/{invoice_id}/payment-proofs/{proof_id}/photo")
+def get_payment_proof_photo(invoice_id: str, proof_id: str, db: Session = Depends(get_db)):
+    proof = db.query(PaymentProof).filter(
+        PaymentProof.id == proof_id, PaymentProof.invoice_id == invoice_id,
+    ).first()
+    if not proof:
+        raise HTTPException(status_code=404, detail="Payment proof not found")
+    path = document_service.payment_proof_absolute_path(proof)
+    mime = proof.content_type or mimetypes.guess_type(proof.original_filename)[0] or "image/jpeg"
+    return FileResponse(path, media_type=mime)
+
+
+@router.post("/{invoice_id}/payment-proofs/{proof_id}/review", response_model=PaymentProofOut)
+def review_payment_proof(invoice_id: str, proof_id: str, body: PaymentProofReviewRequest, db: Session = Depends(get_db)):
+    proof = db.query(PaymentProof).filter(
+        PaymentProof.id == proof_id, PaymentProof.invoice_id == invoice_id,
+    ).first()
+    if not proof:
+        raise HTTPException(status_code=404, detail="Payment proof not found")
+    if proof.status != "pending":
+        raise HTTPException(status_code=409, detail="This payment proof has already been reviewed")
+    proof.status = "approved" if body.action == "approve" else "rejected"
+    if body.action == "reject":
+        proof.notes = body.notes
+    db.commit()
+    db.refresh(proof)
+    return _proof_out(proof)
 
 
 @router.delete("/{invoice_id}/payments/{payment_id}", response_model=InvoiceOut)

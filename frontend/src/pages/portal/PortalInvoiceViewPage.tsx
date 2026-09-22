@@ -3,12 +3,22 @@ import { Link, useParams } from 'react-router-dom'
 import { portalClient } from '@/api/portalClient'
 import { portalApi } from '@/api/portal'
 import { meterSubmissionsApi } from '@/api/meterSubmissions'
+import { paymentProofsApi } from '@/api/paymentProofs'
 import { Invoice, MeterPhoto, Payment } from '@/types/invoice'
 import { PortalMe } from '@/types/settings'
+import { PaymentProof } from '@/types/paymentProof'
 import { formatINR } from '@/utils/formulas'
 import { fetchAuthedBlob, triggerBlobDownload } from '@/utils/blob'
 import InvoiceDocument from '@/components/invoice/InvoiceDocument'
+import PhotoLightbox from '@/components/PhotoLightbox'
 import { useLabels } from '@/hooks/useLabels'
+
+const PROOF_STATUS_COLOURS: Record<string, string> = {
+  pending: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300',
+  approved: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300',
+  applied: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300',
+  rejected: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300',
+}
 
 export default function PortalInvoiceViewPage() {
   const { invoiceId } = useParams<{ invoiceId: string }>()
@@ -19,16 +29,22 @@ export default function PortalInvoiceViewPage() {
   const [downloading, setDownloading] = useState(false)
   const [photoSrcs, setPhotoSrcs] = useState<Map<string, string>>(new Map())
   const [downloadingReceiptId, setDownloadingReceiptId] = useState<string | null>(null)
+  const [paymentProofs, setPaymentProofs] = useState<PaymentProof[]>([])
+  const [proofPhotoSrcs, setProofPhotoSrcs] = useState<Map<string, string>>(new Map())
+  const [expandedProofPhoto, setExpandedProofPhoto] = useState<{ src: string; alt: string } | null>(null)
+  const [uploadingProof, setUploadingProof] = useState(false)
   const photoUrlsRef = useRef<Map<string, string>>(new Map())
+  const proofInputRef = useRef<HTMLInputElement>(null)
   const { l } = useLabels()
 
   useEffect(() => {
     if (!invoiceId) return
     let qrUrl: string | null = null
     setLoading(true)
-    Promise.all([portalApi.getInvoice(invoiceId), portalApi.me()]).then(async ([inv, m]) => {
+    Promise.all([portalApi.getInvoice(invoiceId), portalApi.me(), paymentProofsApi.listForInvoice(invoiceId)]).then(async ([inv, m, proofs]) => {
       setInvoice(inv)
       setMe(m)
+      setPaymentProofs(proofs)
       qrUrl = await fetchAuthedBlob(portalClient, portalApi.qrUrl(inv.id))
       setQrSrc(qrUrl)
       // load meter photo blobs
@@ -44,6 +60,16 @@ export default function PortalInvoiceViewPage() {
         })
       )
       setPhotoSrcs(new Map(srcMap))
+      // load payment-proof blobs
+      const proofSrcMap = new Map<string, string>()
+      await Promise.all(
+        proofs.map(async (proof: PaymentProof) => {
+          const blobUrl = await fetchAuthedBlob(portalClient, paymentProofsApi.portalPhotoUrl(inv.id, proof.id))
+          proofSrcMap.set(proof.id, blobUrl)
+          photoUrlsRef.current.set(`proof:${proof.id}`, blobUrl)
+        })
+      )
+      setProofPhotoSrcs(new Map(proofSrcMap))
       setLoading(false)
     })
     return () => {
@@ -62,6 +88,21 @@ export default function PortalInvoiceViewPage() {
       URL.revokeObjectURL(url)
     } finally {
       setDownloading(false)
+    }
+  }
+
+  async function handleUploadProof(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file || !invoice) return
+    setUploadingProof(true)
+    try {
+      const proof = await paymentProofsApi.submitProof(invoice.id, file)
+      const url = await fetchAuthedBlob(portalClient, paymentProofsApi.portalPhotoUrl(invoice.id, proof.id))
+      setProofPhotoSrcs((prev) => new Map(prev).set(proof.id, url))
+      setPaymentProofs((prev) => [proof, ...prev])
+    } finally {
+      setUploadingProof(false)
+      if (proofInputRef.current) proofInputRef.current.value = ''
     }
   }
 
@@ -106,6 +147,54 @@ export default function PortalInvoiceViewPage() {
             ))}
           </div>
         </div>
+      )}
+
+      <div className="max-w-lg mx-auto card p-4 sm:p-6 space-y-3">
+        <div className="flex items-center justify-between">
+          <h3 className="font-semibold text-sm">{l('proof.portal.title', 'Payment Proof')}</h3>
+          {!invoice.paid && (
+            <label className={`btn-secondary btn-compact cursor-pointer ${uploadingProof ? 'opacity-50 pointer-events-none' : ''}`}>
+              {uploadingProof ? l('btn.uploading', 'Uploading...') : l('proof.btn.upload', 'Upload screenshot')}
+              <input ref={proofInputRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={handleUploadProof} />
+            </label>
+          )}
+        </div>
+        {paymentProofs.length === 0 ? (
+          <p className="text-sm text-slate-500">{l('proof.empty', 'No payment proof submitted yet.')}</p>
+        ) : (
+          <div className="flex flex-wrap gap-3">
+            {paymentProofs.map((proof) => {
+              const src = proofPhotoSrcs.get(proof.id)
+              return (
+                <div key={proof.id} className="space-y-1">
+                  <div className="w-20 h-20 rounded overflow-hidden bg-slate-100 dark:bg-slate-800">
+                    {src ? (
+                      <img
+                        src={src}
+                        alt={proof.originalFilename}
+                        className="w-full h-full object-cover cursor-pointer"
+                        onClick={() => setExpandedProofPhoto({ src, alt: proof.originalFilename })}
+                        title={l('meter.viewFull', 'Click to view full size')}
+                      />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center text-slate-400 text-xs">…</div>
+                    )}
+                  </div>
+                  <span className={`block text-center text-xs rounded-full px-2 py-0.5 ${PROOF_STATUS_COLOURS[proof.status] ?? ''}`}>
+                    {l(`proof.status.${proof.status}`, proof.status)}
+                  </span>
+                </div>
+              )
+            })}
+          </div>
+        )}
+      </div>
+      {expandedProofPhoto && (
+        <PhotoLightbox
+          src={expandedProofPhoto.src}
+          alt={expandedProofPhoto.alt}
+          onClose={() => setExpandedProofPhoto(null)}
+        />
       )}
 
       {invoice.payments.length > 0 && (

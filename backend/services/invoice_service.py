@@ -248,6 +248,7 @@ def add_payment(
     method: str | None,
     notes: str | None,
     recorded_by: str | None,
+    payment_proof_id: str | None = None,
 ) -> Invoice:
     from backend.models.invoice_payment import InvoicePayment
     owed = outstanding(invoice)
@@ -263,6 +264,11 @@ def add_payment(
         recorded_by=recorded_by,
     )
     db.add(payment)
+    db.flush()  # populate payment.id before attach_payment_proof needs it
+
+    if payment_proof_id:
+        attach_payment_proof(db, invoice, payment, payment_proof_id)
+
     # Auto-mark paid once this payment fully covers what was still owed --
     # the admin no longer has to separately remember to also click "Mark
     # paid". `owed` was computed above, before this payment existed, so
@@ -280,11 +286,29 @@ def add_payment(
     return invoice
 
 
+def attach_payment_proof(db: Session, invoice: Invoice, payment, proof_id: str) -> None:
+    from backend.models.payment_proof import PaymentProof
+    proof = db.get(PaymentProof, proof_id)
+    if not proof or proof.invoice_id != invoice.id or proof.status != "approved":
+        raise HTTPException(status_code=422, detail="Invalid or unapproved payment proof")
+    proof.status = "applied"
+    proof.applied_to_payment_id = payment.id
+
+
 def delete_payment(db: Session, invoice: Invoice, payment_id: str) -> Invoice:
     from backend.models.invoice_payment import InvoicePayment
+    from backend.models.payment_proof import PaymentProof
     payment = db.get(InvoicePayment, payment_id)
     if not payment or payment.invoice_id != invoice.id:
         raise HTTPException(status_code=404, detail="Payment not found")
+    # A proof attached to this payment would otherwise dangle (FK violation
+    # on delete under SQLite's foreign_keys=ON) and be stuck "applied"
+    # forever with no way to reattach it elsewhere -- revert it to
+    # approved so it can be picked again on a future payment.
+    proof = db.query(PaymentProof).filter(PaymentProof.applied_to_payment_id == payment_id).first()
+    if proof:
+        proof.status = "approved"
+        proof.applied_to_payment_id = None
     db.delete(payment)
     db.commit()
     db.refresh(invoice)

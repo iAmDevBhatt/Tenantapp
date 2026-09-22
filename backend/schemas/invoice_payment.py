@@ -8,6 +8,7 @@ class PaymentCreate(BaseModel):
     paidDate: date | None = None
     method: str | None = None
     notes: str | None = None
+    paymentProofId: str | None = None
 
 
 class PaymentOut(BaseModel):

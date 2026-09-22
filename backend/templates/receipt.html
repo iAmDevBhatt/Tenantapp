@@ -136,6 +136,11 @@
         <span class="value">&#8377;{{ '%.2f'|format(outstanding) }}</span>
       </div>
 
+      {% if proof_photo_data_uri %}
+      <div class="section-title" style="margin-top:20px;">Payment Proof</div>
+      <img src="{{ proof_photo_data_uri }}" style="max-width:60%;border-radius:6px;border:1px solid #cbd5e1;margin-top:8px;" />
+      {% endif %}
+
       <div class="notes">
         This receipt confirms the payment above was received against the invoice dated {{ invoice.invoice_date.strftime('%d %B %Y') }}.
       </div>

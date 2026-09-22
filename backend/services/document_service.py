@@ -186,6 +186,48 @@ def meter_submission_absolute_path(ms) -> str:
     return os.path.join(settings.UPLOADS_DIR, ms.photo_path)
 
 
+PAYMENT_PROOF_SUBDIR = "payment_proofs"
+
+
+def _payment_proof_dir(tenant_id: str) -> str:
+    d = os.path.join(settings.UPLOADS_DIR, DOCS_SUBDIR, tenant_id, PAYMENT_PROOF_SUBDIR)
+    os.makedirs(d, exist_ok=True)
+    return d
+
+
+def save_payment_proof_file(tenant_id: str, upload: UploadFile) -> tuple[str, str]:
+    """Write a payment-proof screenshot to disk. Returns (rel_path, original_filename).
+    Does NOT create any DB row — the caller creates the PaymentProof."""
+    if upload.content_type and upload.content_type not in ALLOWED_IMAGE_TYPES:
+        raise HTTPException(status_code=415, detail="Only image files are accepted for payment proofs")
+
+    original = upload.filename or "payment.jpg"
+    ext = os.path.splitext(original)[1] or ".jpg"
+    stored_name = f"{uuid.uuid4()}{ext}"
+    proof_dir = _payment_proof_dir(tenant_id)
+    abs_path = os.path.join(proof_dir, stored_name)
+
+    size = 0
+    try:
+        with open(abs_path, "wb") as f:
+            while chunk := upload.file.read(65536):
+                size += len(chunk)
+                if size > MAX_UPLOAD_BYTES:
+                    raise HTTPException(status_code=413, detail="File too large (20 MB max)")
+                f.write(chunk)
+    except HTTPException:
+        if os.path.exists(abs_path):
+            os.remove(abs_path)
+        raise
+
+    rel_path = os.path.join(DOCS_SUBDIR, tenant_id, PAYMENT_PROOF_SUBDIR, stored_name)
+    return rel_path, original
+
+
+def payment_proof_absolute_path(proof) -> str:
+    return os.path.join(settings.UPLOADS_DIR, proof.photo_path)
+
+
 def save_meter_submission_as_document(db: Session, ms, invoice_id: str) -> TenantDocument:
     """Create a TenantDocument from an approved MeterSubmission and mark it applied."""
     doc = TenantDocument(

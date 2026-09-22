@@ -20,3 +20,4 @@ class InvoicePayment(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
 
     invoice = relationship("Invoice", back_populates="payments")
+    proof = relationship("PaymentProof", foreign_keys="[PaymentProof.applied_to_payment_id]", back_populates="payment", uselist=False)

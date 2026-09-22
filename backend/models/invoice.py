@@ -51,6 +51,7 @@ class Invoice(Base):
     tenant = relationship("Tenant", back_populates="invoices")
     writeoffs = relationship("InvoiceWriteOff", cascade="all, delete-orphan", back_populates="invoice", order_by="InvoiceWriteOff.written_off_at")
     payments = relationship("InvoicePayment", cascade="all, delete-orphan", back_populates="invoice", order_by="InvoicePayment.paid_date")
+    payment_proofs = relationship("PaymentProof", cascade="all, delete-orphan", back_populates="invoice", order_by="PaymentProof.submitted_at")
     meter_photos = relationship(
         "TenantDocument",
         primaryjoin="and_(TenantDocument.invoice_id == Invoice.id)",

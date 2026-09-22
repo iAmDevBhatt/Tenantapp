@@ -5,12 +5,22 @@ import { errorMessage } from '@/api/client'
 import { invoicesApi } from '@/api/invoices'
 import { tenantsApi } from '@/api/tenants'
 import { settingsApi } from '@/api/settings'
+import { paymentProofsApi } from '@/api/paymentProofs'
 import { Invoice, WriteOff, Payment, MeterPhoto } from '@/types/invoice'
 import { Tenant } from '@/types/tenant'
+import { PaymentProof } from '@/types/paymentProof'
 import { formatINR } from '@/utils/formulas'
 import { fetchAuthedBlob, triggerBlobDownload } from '@/utils/blob'
 import InvoiceDocument from '@/components/invoice/InvoiceDocument'
+import PhotoLightbox from '@/components/PhotoLightbox'
 import { useLabels } from '@/hooks/useLabels'
+
+const PROOF_STATUS_COLOURS: Record<string, string> = {
+  pending: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300',
+  approved: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300',
+  applied: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300',
+  rejected: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300',
+}
 
 export default function InvoiceDetailPage() {
   const { invoiceId } = useParams<{ invoiceId: string }>()
@@ -26,6 +36,11 @@ export default function InvoiceDetailPage() {
   const [photoSrcs, setPhotoSrcs] = useState<Map<string, string>>(new Map())
   const [uploadingPhoto, setUploadingPhoto] = useState(false)
   const [downloadingReceiptId, setDownloadingReceiptId] = useState<string | null>(null)
+  const [paymentProofs, setPaymentProofs] = useState<PaymentProof[]>([])
+  const [proofPhotoSrcs, setProofPhotoSrcs] = useState<Map<string, string>>(new Map())
+  const [expandedProofPhoto, setExpandedProofPhoto] = useState<{ src: string; alt: string } | null>(null)
+  const [rejectingProofId, setRejectingProofId] = useState<string | null>(null)
+  const [rejectProofNotes, setRejectProofNotes] = useState('')
   const photoInputRef = useRef<HTMLInputElement>(null)
   const { l } = useLabels()
 
@@ -34,12 +49,16 @@ export default function InvoiceDetailPage() {
     let qrUrl: string | null = null
     let photoUrl: string | null = null
     const meterUrls: string[] = []
+    const proofUrls: string[] = []
 
     setLoading(true)
     invoicesApi.get(invoiceId).then(async (inv) => {
       setInvoice(inv)
-      const [t, settings] = await Promise.all([tenantsApi.get(inv.tenantId), settingsApi.get()])
+      const [t, settings, proofs] = await Promise.all([
+        tenantsApi.get(inv.tenantId), settingsApi.get(), paymentProofsApi.listForInvoiceAdmin(inv.id),
+      ])
       setTenant(t)
+      setPaymentProofs(proofs)
       qrUrl = await fetchAuthedBlob(adminClient, invoicesApi.qrUrl(inv.id))
       setQrSrc(qrUrl)
       if (settings.hasPropertyPhoto) {
@@ -53,6 +72,13 @@ export default function InvoiceDetailPage() {
         srcMap.set(mp.id, url)
       }
       setPhotoSrcs(srcMap)
+      const proofSrcMap = new Map<string, string>()
+      for (const proof of proofs) {
+        const url = await fetchAuthedBlob(adminClient, paymentProofsApi.previewPhotoUrl(inv.id, proof.id))
+        proofUrls.push(url)
+        proofSrcMap.set(proof.id, url)
+      }
+      setProofPhotoSrcs(proofSrcMap)
       setLoading(false)
     })
 
@@ -60,6 +86,7 @@ export default function InvoiceDetailPage() {
       if (qrUrl) URL.revokeObjectURL(qrUrl)
       if (photoUrl) URL.revokeObjectURL(photoUrl)
       meterUrls.forEach((u) => URL.revokeObjectURL(u))
+      proofUrls.forEach((u) => URL.revokeObjectURL(u))
     }
   }, [invoiceId])
 
@@ -125,6 +152,20 @@ export default function InvoiceDetailPage() {
     } finally {
       setDownloadingReceiptId(null)
     }
+  }
+
+  async function handleApproveProof(proof: PaymentProof) {
+    if (!invoice) return
+    const updated = await paymentProofsApi.review(invoice.id, proof.id, 'approve')
+    setPaymentProofs((prev) => prev.map((p) => (p.id === updated.id ? updated : p)))
+  }
+
+  async function handleRejectProof(proof: PaymentProof) {
+    if (!invoice) return
+    const updated = await paymentProofsApi.review(invoice.id, proof.id, 'reject', rejectProofNotes || undefined)
+    setPaymentProofs((prev) => prev.map((p) => (p.id === updated.id ? updated : p)))
+    setRejectingProofId(null)
+    setRejectProofNotes('')
   }
 
   async function handleDeleteWriteOff(writeOffId: string) {
@@ -202,6 +243,86 @@ export default function InvoiceDetailPage() {
         />
       </div>
 
+      {/* Payment proof submissions */}
+      {paymentProofs.length > 0 && (
+        <div className="max-w-lg mx-auto card p-4 sm:p-6 space-y-3">
+          <h2 className="font-semibold">{l('proof.section.title', 'Payment Proof Submissions')}</h2>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {paymentProofs.map((proof) => {
+              const src = proofPhotoSrcs.get(proof.id)
+              return (
+                <div key={proof.id} className="border border-slate-200 dark:border-slate-700 rounded-lg overflow-hidden">
+                  <div className="relative bg-slate-100 dark:bg-slate-800 h-40">
+                    {src ? (
+                      <img
+                        src={src}
+                        alt={proof.originalFilename}
+                        className="w-full h-full object-cover cursor-pointer"
+                        onClick={() => setExpandedProofPhoto({ src, alt: proof.originalFilename })}
+                        title={l('meter.viewFull', 'Click to view full size')}
+                      />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center text-slate-400 text-xs">
+                        {l('status.loading', 'Loading…')}
+                      </div>
+                    )}
+                  </div>
+                  <div className="p-3 space-y-2">
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="text-xs text-slate-500">
+                        {new Date(proof.submittedAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}
+                      </p>
+                      <span className={`text-xs rounded-full px-2 py-0.5 ${PROOF_STATUS_COLOURS[proof.status] ?? ''}`}>
+                        {l(`proof.status.${proof.status}`, proof.status)}
+                      </span>
+                    </div>
+                    {proof.status === 'rejected' && proof.notes && (
+                      <p className="text-xs text-red-500">{proof.notes}</p>
+                    )}
+                    {proof.status === 'pending' && rejectingProofId !== proof.id && (
+                      <div className="flex gap-2">
+                        <button className="btn-primary btn-compact flex-1" onClick={() => handleApproveProof(proof)}>
+                          {l('btn.approve', 'Approve')}
+                        </button>
+                        <button className="btn-danger btn-compact flex-1" onClick={() => { setRejectingProofId(proof.id); setRejectProofNotes('') }}>
+                          {l('btn.reject', 'Reject')}
+                        </button>
+                      </div>
+                    )}
+                    {proof.status === 'pending' && rejectingProofId === proof.id && (
+                      <div className="space-y-2">
+                        <textarea
+                          className="input w-full text-sm"
+                          rows={2}
+                          placeholder={l('meter.rejectNotes', 'Reason for rejection (optional)')}
+                          value={rejectProofNotes}
+                          onChange={(e) => setRejectProofNotes(e.target.value)}
+                        />
+                        <div className="flex gap-2">
+                          <button className="btn-danger btn-compact flex-1" onClick={() => handleRejectProof(proof)}>
+                            {l('meter.confirm.reject', 'Confirm rejection')}
+                          </button>
+                          <button className="btn-secondary btn-compact" onClick={() => setRejectingProofId(null)}>
+                            {l('btn.cancel', 'Cancel')}
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
+      {expandedProofPhoto && (
+        <PhotoLightbox
+          src={expandedProofPhoto.src}
+          alt={expandedProofPhoto.alt}
+          onClose={() => setExpandedProofPhoto(null)}
+        />
+      )}
+
       {/* Payments */}
       <div className="max-w-lg mx-auto card p-4 sm:p-6 space-y-4">
         <div className="flex items-center justify-between">
@@ -260,7 +381,12 @@ export default function InvoiceDetailPage() {
           <PaymentForm
             invoiceId={invoice.id}
             outstanding={invoice.outstanding}
-            onAdded={setInvoice}
+            approvedProofs={paymentProofs.filter((p) => p.status === 'approved')}
+            proofPhotoSrcs={proofPhotoSrcs}
+            onAdded={(inv) => {
+              setInvoice(inv)
+              paymentProofsApi.listForInvoiceAdmin(inv.id).then(setPaymentProofs)
+            }}
             l={l}
           />
         )}
@@ -457,16 +583,19 @@ function WriteOffForm({ invoiceId, netPayable, onAdded, l }: WriteOffFormProps) 
 interface PaymentFormProps {
   invoiceId: string
   outstanding: string
+  approvedProofs: PaymentProof[]
+  proofPhotoSrcs: Map<string, string>
   onAdded: (inv: Invoice) => void
   l: (key: string, fallback: string) => string
 }
 
-function PaymentForm({ invoiceId, outstanding, onAdded, l }: PaymentFormProps) {
+function PaymentForm({ invoiceId, outstanding, approvedProofs, proofPhotoSrcs, onAdded, l }: PaymentFormProps) {
   const owed = parseFloat(outstanding) || 0
   const [amount, setAmount] = useState('')
   const [paidDate, setPaidDate] = useState(() => new Date().toISOString().slice(0, 10))
   const [method, setMethod] = useState('')
   const [notes, setNotes] = useState('')
+  const [proofId, setProofId] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -482,11 +611,13 @@ function PaymentForm({ invoiceId, outstanding, onAdded, l }: PaymentFormProps) {
     try {
       const updated = await invoicesApi.addPayment(invoiceId, {
         amount, paidDate, method: method || undefined, notes: notes || undefined,
+        paymentProofId: proofId || undefined,
       })
       onAdded(updated)
       setAmount('')
       setMethod('')
       setNotes('')
+      setProofId(null)
     } catch (err: any) {
       setError(errorMessage(err, l('error.generic', 'Something went wrong')))
     } finally {
@@ -498,6 +629,38 @@ function PaymentForm({ invoiceId, outstanding, onAdded, l }: PaymentFormProps) {
     <form onSubmit={handleSubmit} className="space-y-3 pt-2 border-t border-slate-200 dark:border-slate-800">
       <p className="text-xs font-medium text-slate-500">{l('payment.addTitle', 'Record a payment')}</p>
       {error && <div className="rounded-lg bg-red-50 text-red-700 px-3 py-2 text-sm">{error}</div>}
+      {approvedProofs.length > 0 && (
+        <div>
+          <label className="field-label">{l('proof.label.attach', 'Attach payment proof (optional)')}</label>
+          <div className="flex gap-2 flex-wrap">
+            {approvedProofs.map((proof) => {
+              const src = proofPhotoSrcs.get(proof.id)
+              const selected = proofId === proof.id
+              return (
+                <button
+                  key={proof.id}
+                  type="button"
+                  onClick={() => setProofId(selected ? null : proof.id)}
+                  className={`relative rounded-lg overflow-hidden border-2 transition-colors ${
+                    selected ? 'border-brand-600 ring-2 ring-brand-300' : 'border-slate-200 dark:border-slate-700 hover:border-slate-400'
+                  }`}
+                >
+                  {src ? (
+                    <img src={src} alt={proof.originalFilename} className="w-16 h-16 object-cover" />
+                  ) : (
+                    <div className="w-16 h-16 bg-slate-100 dark:bg-slate-800" />
+                  )}
+                  {selected && (
+                    <div className="absolute top-0.5 right-0.5 w-4 h-4 bg-brand-600 rounded-full flex items-center justify-center text-white text-[10px] font-bold">
+                      ✓
+                    </div>
+                  )}
+                </button>
+              )
+            })}
+          </div>
+        </div>
+      )}
       <div className="grid grid-cols-2 gap-3">
         <div>
           <label className="field-label">{l('payment.label.amount', 'Amount received (₹)')}</label>

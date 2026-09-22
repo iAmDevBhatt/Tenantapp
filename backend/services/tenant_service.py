@@ -68,17 +68,17 @@ def reactivate(db: Session, tenant: Tenant) -> Tenant:
 def delete_tenant(db: Session, tenant: Tenant) -> None:
     """Permanently deletes a tenant and everything tied to it: meter
     submissions, documents (incl. meter-reading photos), invoices (+
-    write-offs via ORM cascade), the portal account and invites (ORM
-    cascade off Tenant), and every uploaded file on disk. Irreversible --
-    unlike `deactivate`, no history survives. Deletion order respects FK
-    constraints (SQLite has foreign_keys=ON): rows that reference an
-    invoice must go before the invoice itself."""
+    write-offs, payments, and payment proofs via ORM cascade), the portal
+    account and invites (ORM cascade off Tenant), and every uploaded file
+    on disk. Irreversible -- unlike `deactivate`, no history survives.
+    Deletion order respects FK constraints (SQLite has foreign_keys=ON):
+    rows that reference an invoice must go before the invoice itself."""
     tenant_id = tenant.id
 
     db.query(MeterSubmission).filter(MeterSubmission.tenant_id == tenant_id).delete()
     db.query(TenantDocument).filter(TenantDocument.tenant_id == tenant_id).delete()
     for invoice in db.query(Invoice).filter(Invoice.tenant_id == tenant_id).all():
-        db.delete(invoice)  # cascades invoice_writeoffs
+        db.delete(invoice)  # cascades invoice_writeoffs, payments, payment_proofs
 
     db.delete(tenant)  # cascades tenant_user, invites; documents already cleared
     db.commit()

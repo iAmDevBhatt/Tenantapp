@@ -39,6 +39,7 @@ export interface PaymentCreateInput {
   paidDate?: string
   method?: string
   notes?: string
+  paymentProofId?: string
 }
 
 export interface Invoice {

@@ -11,12 +11,14 @@ from backend.core.deps import get_current_tenant
 from backend.core.limiter import limiter
 from backend.database import get_db
 from backend.models.meter_submission import MeterSubmission
+from backend.models.payment_proof import PaymentProof
 from backend.models.tenant_user import TenantUser
 from backend.schemas.meter_submission import MeterSubmissionOut
 from backend.schemas.portal import PortalMeOut
 from backend.schemas.invoice import InvoiceOut
 from backend.schemas.invoice_writeoff import WriteOffOut
 from backend.schemas.invoice_payment import PaymentOut
+from backend.schemas.payment_proof import PaymentProofOut
 from backend.schemas.tenant_document import DocumentOut
 from backend.models.tenant_document import TenantDocument
 from backend.services import document_service, invoice_service, settings_service, qr_service, tenant_service
@@ -189,6 +191,63 @@ def get_my_invoice_qr(
     ctx = build_invoice_view(inv, inv.tenant, settings_service.get_or_create(db))
     png_bytes = qr_service.generate_qr_png_bytes(ctx["qr_uri"])
     return Response(content=png_bytes, media_type="image/png")
+
+
+def _proof_out(p: PaymentProof) -> PaymentProofOut:
+    return PaymentProofOut(
+        id=p.id, tenantId=p.tenant_id, invoiceId=p.invoice_id,
+        originalFilename=p.original_filename, contentType=p.content_type, sizeBytes=p.size_bytes,
+        submittedAt=p.submitted_at, status=p.status, notes=p.notes,
+        appliedToPaymentId=p.applied_to_payment_id,
+    )
+
+
+@router.post("/invoices/{invoice_id}/payment-proofs", response_model=PaymentProofOut)
+@limiter.limit("20/minute")
+def submit_payment_proof(
+    request: Request,
+    invoice_id: str,
+    file: UploadFile = File(...),
+    tenant_user: TenantUser = Depends(get_current_tenant),
+    db: Session = Depends(get_db),
+):
+    inv = _owned_invoice_or_404(db, tenant_user, invoice_id)
+    rel_path, original = document_service.save_payment_proof_file(tenant_user.tenant_id, file)
+    proof = PaymentProof(
+        tenant_id=tenant_user.tenant_id,
+        invoice_id=inv.id,
+        photo_path=rel_path,
+        original_filename=original,
+        content_type=file.content_type,
+        size_bytes=None,
+        status="pending",
+    )
+    db.add(proof)
+    db.commit()
+    db.refresh(proof)
+    return _proof_out(proof)
+
+
+@router.get("/invoices/{invoice_id}/payment-proofs", response_model=list[PaymentProofOut])
+def list_my_payment_proofs(
+    invoice_id: str, tenant_user: TenantUser = Depends(get_current_tenant), db: Session = Depends(get_db)
+):
+    inv = _owned_invoice_or_404(db, tenant_user, invoice_id)
+    return [_proof_out(p) for p in inv.payment_proofs]
+
+
+@router.get("/invoices/{invoice_id}/payment-proofs/{proof_id}/photo")
+def get_my_payment_proof_photo(
+    invoice_id: str, proof_id: str,
+    tenant_user: TenantUser = Depends(get_current_tenant), db: Session = Depends(get_db),
+):
+    inv = _owned_invoice_or_404(db, tenant_user, invoice_id)
+    proof = next((p for p in inv.payment_proofs if p.id == proof_id), None)
+    if not proof:
+        raise HTTPException(status_code=404, detail="Payment proof not found")
+    path = document_service.payment_proof_absolute_path(proof)
+    mime = proof.content_type or mimetypes.guess_type(proof.original_filename)[0] or "image/jpeg"
+    return FileResponse(path, media_type=mime)
 
 
 _VALID_PHOTO_TYPES = {"flat_meter", "water_meter", "property"}
