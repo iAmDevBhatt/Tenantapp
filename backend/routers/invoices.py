@@ -8,12 +8,13 @@ from backend.core.deps import get_current_admin
 from backend.database import get_db
 from backend.models.admin_user import AdminUser
 from backend.models.meter_submission import MeterSubmission
-from backend.schemas.invoice import InvoiceCreate, InvoiceUpdate, InvoiceOut, TogglePaidRequest, RecordPaymentRequest
+from backend.schemas.invoice import InvoiceCreate, InvoiceUpdate, InvoiceOut, TogglePaidRequest
 from backend.schemas.invoice_writeoff import WriteOffCreate, WriteOffOut
+from backend.schemas.invoice_payment import PaymentCreate, PaymentOut
 from backend.schemas.tenant_document import DocumentOut
 from backend.models.tenant_document import TenantDocument
 from backend.services import invoice_service, tenant_service, settings_service, qr_service, document_service
-from backend.services.pdf_service import render_invoice_pdf, PdfUnavailableError, build_invoice_view
+from backend.services.pdf_service import render_invoice_pdf, render_payment_receipt_pdf, PdfUnavailableError, build_invoice_view
 
 router = APIRouter(prefix="/api/invoices", tags=["invoices"], dependencies=[Depends(get_current_admin)])
 
@@ -35,6 +36,13 @@ def _out(inv, db=None) -> InvoiceOut:
         )
         for wo in inv.writeoffs
     ]
+    payments = [
+        PaymentOut(
+            id=p.id, invoiceId=p.invoice_id, amount=p.amount, paidDate=p.paid_date,
+            method=p.method, notes=p.notes, recordedBy=p.recorded_by, createdAt=p.created_at,
+        )
+        for p in inv.payments
+    ]
     meter_photos = []
     if db is not None:
         meter_photos = [
@@ -50,9 +58,11 @@ def _out(inv, db=None) -> InvoiceOut:
         monthlyRent=inv.monthly_rent, upiId=inv.upi_id, payeeName=inv.payee_name, dueDays=inv.due_days,
         roomUsage=inv.room_usage, waterUsage=inv.water_usage, roomAmount=inv.room_amount,
         waterAmount=inv.water_amount, totalPayable=inv.total_payable,
-        paid=inv.paid, paidDate=inv.paid_date, amountPaid=inv.amount_paid, createdAt=inv.created_at,
+        paid=inv.paid, paidDate=inv.paid_date, createdAt=inv.created_at,
         writeOffs=write_offs,
+        payments=payments,
         netPayable=invoice_service.net_payable(inv),
+        totalPaid=invoice_service.total_paid(inv),
         outstanding=invoice_service.outstanding(inv),
         meterPhotos=meter_photos,
     )
@@ -110,11 +120,45 @@ def toggle_paid(invoice_id: str, body: TogglePaidRequest, db: Session = Depends(
     return _out(invoice_service.toggle_paid(db, inv, body.paid, paid_date), db)
 
 
-@router.patch("/{invoice_id}/payment", response_model=InvoiceOut)
-def record_payment(invoice_id: str, body: RecordPaymentRequest, db: Session = Depends(get_db)):
+@router.post("/{invoice_id}/payments", response_model=InvoiceOut)
+def add_payment(
+    invoice_id: str,
+    body: PaymentCreate,
+    db: Session = Depends(get_db),
+    current_admin: AdminUser = Depends(get_current_admin),
+):
     inv = invoice_service.get_or_404(db, invoice_id)
-    inv = invoice_service.record_payment(db, inv, body.amountPaid)
+    inv = invoice_service.add_payment(
+        db, inv, body.amount, body.paidDate, body.method, body.notes, current_admin.username,
+    )
     return _out(inv, db)
+
+
+@router.delete("/{invoice_id}/payments/{payment_id}", response_model=InvoiceOut)
+def delete_payment(invoice_id: str, payment_id: str, db: Session = Depends(get_db)):
+    inv = invoice_service.get_or_404(db, invoice_id)
+    inv = invoice_service.delete_payment(db, inv, payment_id)
+    return _out(inv, db)
+
+
+@router.get("/{invoice_id}/payments/{payment_id}/receipt.pdf")
+def get_payment_receipt_pdf(invoice_id: str, payment_id: str, db: Session = Depends(get_db)):
+    inv = invoice_service.get_or_404(db, invoice_id)
+    payment = next((p for p in inv.payments if p.id == payment_id), None)
+    if not payment:
+        raise HTTPException(status_code=404, detail="Payment not found")
+    settings_row = settings_service.get_or_create(db)
+    try:
+        pdf_bytes = render_payment_receipt_pdf(payment, inv, inv.tenant, settings_row)
+    except PdfUnavailableError as e:
+        raise HTTPException(status_code=501, detail=str(e))
+    import re
+    safe_name = re.sub(r'[^\w\-]', '_', inv.tenant.name)
+    filename = f"receipt-{safe_name}-{payment.paid_date}.pdf"
+    return Response(
+        content=pdf_bytes, media_type="application/pdf",
+        headers={"Content-Disposition": f'inline; filename="{filename}"'},
+    )
 
 
 @router.delete("/{invoice_id}")

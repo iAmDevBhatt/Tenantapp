@@ -84,7 +84,9 @@ Legend: **A** = admin JWT required, **T** = tenant JWT required, **P** = public.
 | GET | `/api/invoices/{id}/qr.png` | A | `image/png` |
 | POST | `/api/invoices/{id}/writeoffs` | A | `{amount, reason}` — amount must be > 0 and ≤ netPayable; only on unpaid invoices |
 | DELETE | `/api/invoices/{id}/writeoffs/{wid}` | A | undo a write-off |
-| PATCH | `/api/invoices/{id}/payment` | A | `{amountPaid}` — record partial/full payment received; 0 ≤ amount ≤ netPayable |
+| POST | `/api/invoices/{id}/payments` | A | `{amount, paidDate?, method?, notes?}` — adds one payment row (additive, never overwrites); 0 < amount ≤ outstanding |
+| DELETE | `/api/invoices/{id}/payments/{pid}` | A | delete a mistaken payment entry |
+| GET | `/api/invoices/{id}/payments/{pid}/receipt.pdf` | A | payment receipt PDF, or `501` if WeasyPrint libs missing |
 | POST | `/api/invoices/{id}/photos` | A | multipart upload — max 3 per invoice; saves as `doc_type="meter_reading"` with `invoice_id` set |
 | DELETE | `/api/invoices/{id}/photos/{photo_id}` | A | delete a meter reading photo |
 | GET | `/api/portal/me` | T | own tenant profile (name, address, rates, contact, photo flag) |
@@ -95,6 +97,7 @@ Legend: **A** = admin JWT required, **T** = tenant JWT required, **P** = public.
 | GET | `/api/portal/invoices/{id}` | T | 404 if not this tenant's invoice |
 | GET | `/api/portal/invoices/{id}/pdf` | T | same scoping + same renderer as admin |
 | GET | `/api/portal/invoices/{id}/qr.png` | T | same scoping |
+| GET | `/api/portal/invoices/{invoice_id}/payments/{payment_id}/receipt.pdf` | T | read-only; own invoice's own payment only, scoped via `_owned_invoice_or_404` |
 | POST | `/api/portal/meter-submissions` | T | multipart: `file` + `photo_type` (Form); validates type in `{flat_meter,water_meter,property}`; image-only MIME; 20 MB cap; rate-limited 20/min; returns `MeterSubmissionOut` |
 | GET | `/api/portal/meter-submissions` | T | list tenant's own submissions, newest first; returns `list[MeterSubmissionOut]` |
 | GET | `/api/portal/invoices/{invoice_id}/meter-photos/{photo_id}` | T | streams one meter photo attached to an owned invoice; `FileResponse` |

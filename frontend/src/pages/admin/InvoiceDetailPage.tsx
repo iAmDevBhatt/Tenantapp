@@ -5,7 +5,7 @@ import { errorMessage } from '@/api/client'
 import { invoicesApi } from '@/api/invoices'
 import { tenantsApi } from '@/api/tenants'
 import { settingsApi } from '@/api/settings'
-import { Invoice, WriteOff, MeterPhoto } from '@/types/invoice'
+import { Invoice, WriteOff, Payment, MeterPhoto } from '@/types/invoice'
 import { Tenant } from '@/types/tenant'
 import { formatINR } from '@/utils/formulas'
 import { fetchAuthedBlob, triggerBlobDownload } from '@/utils/blob'
@@ -25,6 +25,7 @@ export default function InvoiceDetailPage() {
   const [pdfError, setPdfError] = useState<string | null>(null)
   const [photoSrcs, setPhotoSrcs] = useState<Map<string, string>>(new Map())
   const [uploadingPhoto, setUploadingPhoto] = useState(false)
+  const [downloadingReceiptId, setDownloadingReceiptId] = useState<string | null>(null)
   const photoInputRef = useRef<HTMLInputElement>(null)
   const { l } = useLabels()
 
@@ -108,10 +109,22 @@ export default function InvoiceDetailPage() {
     navigate(`/tenants/${invoice.tenantId}`)
   }
 
-  async function handleRecordPayment(amountPaid: number) {
-    if (!invoice) return
-    const updated = await invoicesApi.recordPayment(invoice.id, amountPaid)
+  async function handleDeletePayment(paymentId: string) {
+    if (!invoice || !confirm(l('confirm.deletePayment', 'Delete this payment? This cannot be undone.'))) return
+    const updated = await invoicesApi.deletePayment(invoice.id, paymentId)
     setInvoice(updated)
+  }
+
+  async function handleDownloadReceipt(paymentId: string) {
+    if (!invoice || !tenant) return
+    setDownloadingReceiptId(paymentId)
+    try {
+      const url = await fetchAuthedBlob(adminClient, invoicesApi.paymentReceiptUrl(invoice.id, paymentId))
+      triggerBlobDownload(url, `receipt-${tenant.name.replace(/\s+/g, '_')}-${paymentId}.pdf`)
+      URL.revokeObjectURL(url)
+    } finally {
+      setDownloadingReceiptId(null)
+    }
   }
 
   async function handleDeleteWriteOff(writeOffId: string) {
@@ -152,8 +165,9 @@ export default function InvoiceDetailPage() {
   if (loading || !invoice || !tenant) return <p className="text-slate-500">{l('status.loading', 'Loading…')}</p>
 
   const hasWriteOffs = invoice.writeOffs.length > 0
+  const hasPayments = invoice.payments.length > 0
   const netLessThanTotal = parseFloat(invoice.netPayable) < parseFloat(invoice.totalPayable)
-  const isPartiallyPaid = !invoice.paid && invoice.amountPaid !== null
+  const isPartiallyPaid = !invoice.paid && hasPayments
 
   return (
     <div className="space-y-4">
@@ -188,35 +202,72 @@ export default function InvoiceDetailPage() {
         />
       </div>
 
-      {/* Payment recording */}
-      {!invoice.paid && (
-        <div className="max-w-lg mx-auto card p-4 sm:p-6 space-y-4">
-          <div className="flex items-center justify-between">
-            <h2 className="font-semibold">{l('payment.section.title', 'Payment Received')}</h2>
-            {isPartiallyPaid && (
-              <span className="text-sm">
-                {l('payment.outstanding', 'Outstanding')}:{' '}
-                <strong className="text-red-600 dark:text-red-400">{formatINR(invoice.outstanding)}</strong>
-              </span>
-            )}
-          </div>
-          {isPartiallyPaid && (
-            <div className="text-sm text-slate-600 dark:text-slate-400">
-              {l('payment.receivedSoFar', 'Received so far')}:{' '}
-              <strong className="text-green-700 dark:text-green-400">{formatINR(invoice.amountPaid!)}</strong>
-              {' '}
-              <span className="text-slate-400">{l('payment.ofTotal', 'of')} {formatINR(invoice.netPayable)}</span>
-            </div>
+      {/* Payments */}
+      <div className="max-w-lg mx-auto card p-4 sm:p-6 space-y-4">
+        <div className="flex items-center justify-between">
+          <h2 className="font-semibold">{l('payment.section.title', 'Payments Received')}</h2>
+          {!invoice.paid && hasPayments && (
+            <span className="text-sm">
+              {l('payment.outstanding', 'Outstanding')}:{' '}
+              <strong className="text-red-600 dark:text-red-400">{formatINR(invoice.outstanding)}</strong>
+            </span>
           )}
-          <RecordPaymentForm
+        </div>
+
+        {hasPayments && (
+          <div className="text-sm text-slate-600 dark:text-slate-400">
+            {l('payment.receivedSoFar', 'Received so far')}:{' '}
+            <strong className="text-green-700 dark:text-green-400">{formatINR(invoice.totalPaid)}</strong>
+            {' '}
+            <span className="text-slate-400">{l('payment.ofTotal', 'of')} {formatINR(invoice.netPayable)}</span>
+          </div>
+        )}
+
+        {hasPayments && (
+          <ul className="divide-y divide-slate-200 dark:divide-slate-800">
+            {invoice.payments.map((p: Payment) => (
+              <li key={p.id} className="py-2 flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="font-medium text-sm">{formatINR(p.amount)}</p>
+                  <p className="text-xs text-slate-600 dark:text-slate-400">
+                    {new Date(p.paidDate).toLocaleDateString('en-IN')}
+                    {p.method && ` · ${p.method}`}
+                  </p>
+                  {p.notes && <p className="text-xs text-slate-400">{p.notes}</p>}
+                </div>
+                <div className="flex gap-2 flex-shrink-0">
+                  <button
+                    className="btn-secondary btn-compact text-xs"
+                    onClick={() => handleDownloadReceipt(p.id)}
+                    disabled={downloadingReceiptId === p.id}
+                  >
+                    {downloadingReceiptId === p.id ? l('btn.preparing', 'Preparing…') : l('payment.btn.receipt', 'Receipt')}
+                  </button>
+                  <button className="btn-danger btn-compact text-xs" onClick={() => handleDeletePayment(p.id)}>
+                    {l('btn.delete', 'Delete')}
+                  </button>
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+
+        {!hasPayments && (
+          <p className="text-sm text-slate-500">{l('payment.empty', 'No payments recorded yet.')}</p>
+        )}
+
+        {!invoice.paid && (
+          <PaymentForm
             invoiceId={invoice.id}
-            netPayable={invoice.netPayable}
-            currentAmountPaid={invoice.amountPaid}
-            onSaved={handleRecordPayment}
+            outstanding={invoice.outstanding}
+            onAdded={setInvoice}
             l={l}
           />
-        </div>
-      )}
+        )}
+        {invoice.paid && !hasPayments && (
+          <p className="text-xs text-slate-400">{l('payment.noPaymentsOnPaid', 'Mark the invoice as unpaid to record payments.')}</p>
+        )}
+      </div>
 
       {/* Meter reading photos */}
       <div className="max-w-lg mx-auto card p-4 sm:p-6 space-y-3">
@@ -403,31 +454,39 @@ function WriteOffForm({ invoiceId, netPayable, onAdded, l }: WriteOffFormProps) 
   )
 }
 
-interface RecordPaymentFormProps {
+interface PaymentFormProps {
   invoiceId: string
-  netPayable: string
-  currentAmountPaid: string | null
-  onSaved: (amountPaid: number) => Promise<void>
+  outstanding: string
+  onAdded: (inv: Invoice) => void
   l: (key: string, fallback: string) => string
 }
 
-function RecordPaymentForm({ netPayable, currentAmountPaid, onSaved, l }: RecordPaymentFormProps) {
-  const net = parseFloat(netPayable) || 0
-  const [amount, setAmount] = useState(currentAmountPaid !== null ? currentAmountPaid : '')
+function PaymentForm({ invoiceId, outstanding, onAdded, l }: PaymentFormProps) {
+  const owed = parseFloat(outstanding) || 0
+  const [amount, setAmount] = useState('')
+  const [paidDate, setPaidDate] = useState(() => new Date().toISOString().slice(0, 10))
+  const [method, setMethod] = useState('')
+  const [notes, setNotes] = useState('')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault()
     const amt = parseFloat(amount)
-    if (isNaN(amt) || amt < 0 || amt > net) {
-      setError(l('payment.validation.range', `Amount must be between 0 and ${net}`))
+    if (!amt || amt <= 0 || amt > owed) {
+      setError(l('payment.validation.range', `Amount must be between 0.01 and ${outstanding}`).replace(outstanding, formatINR(outstanding)))
       return
     }
     setSaving(true)
     setError(null)
     try {
-      await onSaved(amt)
+      const updated = await invoicesApi.addPayment(invoiceId, {
+        amount, paidDate, method: method || undefined, notes: notes || undefined,
+      })
+      onAdded(updated)
+      setAmount('')
+      setMethod('')
+      setNotes('')
     } catch (err: any) {
       setError(errorMessage(err, l('error.generic', 'Something went wrong')))
     } finally {
@@ -437,26 +496,40 @@ function RecordPaymentForm({ netPayable, currentAmountPaid, onSaved, l }: Record
 
   return (
     <form onSubmit={handleSubmit} className="space-y-3 pt-2 border-t border-slate-200 dark:border-slate-800">
-      <p className="text-xs font-medium text-slate-500">
-        {currentAmountPaid !== null ? l('payment.updateTitle', 'Update amount received') : l('payment.addTitle', 'Record amount received')}
-      </p>
+      <p className="text-xs font-medium text-slate-500">{l('payment.addTitle', 'Record a payment')}</p>
       {error && <div className="rounded-lg bg-red-50 text-red-700 px-3 py-2 text-sm">{error}</div>}
-      <div className="flex gap-3 items-end">
-        <div className="flex-1">
+      <div className="grid grid-cols-2 gap-3">
+        <div>
           <label className="field-label">{l('payment.label.amount', 'Amount received (₹)')}</label>
           <input
-            className="field-input" type="number" step="0.01" min="0" max={net}
+            className="field-input" type="number" step="0.01" min="0.01" max={owed}
             placeholder="0.00" required value={amount}
             onChange={(e) => setAmount(e.target.value)}
           />
         </div>
-        <button type="submit" className="btn-primary btn-compact" disabled={saving}>
-          {saving ? l('btn.saving', 'Saving…') : l('payment.btn.save', 'Save')}
-        </button>
+        <div>
+          <label className="field-label">{l('payment.label.date', 'Date')}</label>
+          <input
+            className="field-input" type="date" required value={paidDate}
+            onChange={(e) => setPaidDate(e.target.value)}
+          />
+        </div>
       </div>
-      <p className="text-xs text-slate-400">
-        {l('payment.hint', 'Enter the total amount received so far. The outstanding balance carries forward to the next invoice.')}
-      </p>
+      <div>
+        <label className="field-label">{l('payment.label.method', 'Method (optional)')}</label>
+        <input
+          className="field-input"
+          placeholder={l('payment.placeholder.method', 'e.g. UPI, Cash, Bank transfer')}
+          value={method} onChange={(e) => setMethod(e.target.value)}
+        />
+      </div>
+      <div>
+        <label className="field-label">{l('payment.label.notes', 'Notes (optional)')}</label>
+        <input className="field-input" value={notes} onChange={(e) => setNotes(e.target.value)} />
+      </div>
+      <button type="submit" className="btn-primary btn-compact" disabled={saving}>
+        {saving ? l('btn.saving', 'Saving…') : l('payment.btn.add', 'Add payment')}
+      </button>
     </form>
   )
 }

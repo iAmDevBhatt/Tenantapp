@@ -11,6 +11,9 @@ engine already resolves DATABASE_URL correctly (relative dev paths, and the
 `sqlite:////absolute/path` form Docker uses); re-parsing the URL by hand here
 previously mishandled the 4-slash absolute form and broke migrations under
 Docker -- don't reintroduce that."""
+import uuid
+from datetime import date, datetime
+
 from sqlalchemy import text
 from sqlalchemy.engine import Connection
 
@@ -21,7 +24,7 @@ import backend.models  # noqa: F401
 
 _KNOWN_TABLES = {
     "tenants", "tenant_users", "tenant_documents", "tenant_invites",
-    "invoices", "invoice_writeoffs", "properties", "property_flats",
+    "invoices", "invoice_writeoffs", "invoice_payments", "properties", "property_flats",
     "meter_submissions", "admin_users", "settings",
 }
 
@@ -32,6 +35,38 @@ def _add_column_if_missing(conn: Connection, table: str, column: str, ddl_type: 
     if column not in existing:
         print(f"migrate: adding {table}.{column}")
         conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {column} {ddl_type}"))
+
+
+def _backfill_legacy_payments(conn: Connection) -> None:
+    """R10: the old single-payment flow wrote a running total straight into
+    invoices.amount_paid. Now that payments are a proper additive ledger
+    (invoice_payments), convert each such invoice into one equivalent
+    payment row. Guarded by "zero existing payment rows for this invoice",
+    so it's safe to run every boot -- an invoice that already has any real
+    payment (migrated or newly recorded) is never touched again."""
+    legacy = conn.execute(text(
+        "SELECT id, amount_paid, paid_date, created_at FROM invoices "
+        "WHERE amount_paid IS NOT NULL AND amount_paid > 0 "
+        "AND id NOT IN (SELECT invoice_id FROM invoice_payments)"
+    )).fetchall()
+    for inv_id, amount_paid, paid_date, created_at in legacy:
+        print(f"migrate: backfilling legacy payment for invoice {inv_id}")
+        fallback_date = str(created_at)[:10] if created_at else date.today().isoformat()
+        conn.execute(
+            text(
+                "INSERT INTO invoice_payments "
+                "(id, invoice_id, amount, paid_date, method, notes, recorded_by, created_at) "
+                "VALUES (:id, :invoice_id, :amount, :paid_date, NULL, :notes, NULL, :created_at)"
+            ),
+            {
+                "id": str(uuid.uuid4()),
+                "invoice_id": inv_id,
+                "amount": amount_paid,
+                "paid_date": paid_date or fallback_date,
+                "notes": "Migrated from the previous single amount-received field",
+                "created_at": datetime.utcnow(),
+            },
+        )
 
 
 def run_migrations() -> None:
@@ -53,6 +88,8 @@ def run_migrations() -> None:
         _add_column_if_missing(conn, "tenant_documents", "invoice_id", "TEXT")
         # R6: partial payment tracking
         _add_column_if_missing(conn, "invoices", "amount_paid", "NUMERIC(10,2)")
+        # R10: migrate legacy amount_paid values into the invoice_payments ledger
+        _backfill_legacy_payments(conn)
         # R7: landlord controls which documents are visible to the tenant
         _add_column_if_missing(conn, "tenant_documents", "tenant_visible", "INTEGER NOT NULL DEFAULT 0")
         # R8: landlord can block portal access temporarily (or on move-out)

@@ -18,4 +18,6 @@ export const portalApi = {
 
   pdfUrl: (id: string) => `/portal/invoices/${id}/pdf`,
   qrUrl: (id: string) => `/portal/invoices/${id}/qr.png`,
+  paymentReceiptUrl: (invoiceId: string, paymentId: string) =>
+    `/portal/invoices/${invoiceId}/payments/${paymentId}/receipt.pdf`,
 }

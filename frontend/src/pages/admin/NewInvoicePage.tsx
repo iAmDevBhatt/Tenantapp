@@ -55,7 +55,7 @@ export default function NewInvoicePage() {
         // Detect if the most recent invoice blocks creation (no payment, not paid, no write-offs)
         if (invoices.length > 0) {
           const last = invoices[0]
-          const isBlocked = !last.paid && last.amountPaid === null && last.writeOffs.length === 0
+          const isBlocked = !last.paid && last.payments.length === 0 && last.writeOffs.length === 0
           setBlockingInvoice(isBlocked ? last : null)
         }
       })

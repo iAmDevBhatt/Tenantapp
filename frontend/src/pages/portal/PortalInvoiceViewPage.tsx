@@ -3,8 +3,9 @@ import { Link, useParams } from 'react-router-dom'
 import { portalClient } from '@/api/portalClient'
 import { portalApi } from '@/api/portal'
 import { meterSubmissionsApi } from '@/api/meterSubmissions'
-import { Invoice, MeterPhoto } from '@/types/invoice'
+import { Invoice, MeterPhoto, Payment } from '@/types/invoice'
 import { PortalMe } from '@/types/settings'
+import { formatINR } from '@/utils/formulas'
 import { fetchAuthedBlob, triggerBlobDownload } from '@/utils/blob'
 import InvoiceDocument from '@/components/invoice/InvoiceDocument'
 import { useLabels } from '@/hooks/useLabels'
@@ -17,6 +18,7 @@ export default function PortalInvoiceViewPage() {
   const [loading, setLoading] = useState(true)
   const [downloading, setDownloading] = useState(false)
   const [photoSrcs, setPhotoSrcs] = useState<Map<string, string>>(new Map())
+  const [downloadingReceiptId, setDownloadingReceiptId] = useState<string | null>(null)
   const photoUrlsRef = useRef<Map<string, string>>(new Map())
   const { l } = useLabels()
 
@@ -63,6 +65,18 @@ export default function PortalInvoiceViewPage() {
     }
   }
 
+  async function handleDownloadReceipt(paymentId: string) {
+    if (!invoice) return
+    setDownloadingReceiptId(paymentId)
+    try {
+      const url = await fetchAuthedBlob(portalClient, portalApi.paymentReceiptUrl(invoice.id, paymentId))
+      triggerBlobDownload(url, `receipt-${paymentId}.pdf`)
+      URL.revokeObjectURL(url)
+    } finally {
+      setDownloadingReceiptId(null)
+    }
+  }
+
   if (loading || !invoice || !me) return <p className="text-slate-500">{l('status.loading', 'Loading…')}</p>
 
   return (
@@ -91,6 +105,32 @@ export default function PortalInvoiceViewPage() {
               </div>
             ))}
           </div>
+        </div>
+      )}
+
+      {invoice.payments.length > 0 && (
+        <div className="max-w-lg mx-auto card p-4 sm:p-6 space-y-3">
+          <h3 className="font-semibold text-sm">{l('payment.history', 'Payment History')}</h3>
+          <ul className="divide-y divide-slate-200 dark:divide-slate-800">
+            {invoice.payments.map((p: Payment) => (
+              <li key={p.id} className="py-2 flex items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="font-medium text-sm">{formatINR(p.amount)}</p>
+                  <p className="text-xs text-slate-500">
+                    {new Date(p.paidDate).toLocaleDateString('en-IN')}
+                    {p.method && ` · ${p.method}`}
+                  </p>
+                </div>
+                <button
+                  className="btn-secondary btn-compact flex-shrink-0"
+                  onClick={() => handleDownloadReceipt(p.id)}
+                  disabled={downloadingReceiptId === p.id}
+                >
+                  {downloadingReceiptId === p.id ? l('btn.preparing', 'Preparing…') : l('payment.btn.receipt', 'Receipt')}
+                </button>
+              </li>
+            ))}
+          </ul>
         </div>
       )}
 

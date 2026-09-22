@@ -16,10 +16,11 @@ from backend.schemas.meter_submission import MeterSubmissionOut
 from backend.schemas.portal import PortalMeOut
 from backend.schemas.invoice import InvoiceOut
 from backend.schemas.invoice_writeoff import WriteOffOut
+from backend.schemas.invoice_payment import PaymentOut
 from backend.schemas.tenant_document import DocumentOut
 from backend.models.tenant_document import TenantDocument
 from backend.services import document_service, invoice_service, settings_service, qr_service, tenant_service
-from backend.services.pdf_service import render_invoice_pdf, PdfUnavailableError, build_invoice_view
+from backend.services.pdf_service import render_invoice_pdf, render_payment_receipt_pdf, PdfUnavailableError, build_invoice_view
 
 router = APIRouter(prefix="/api/portal", tags=["portal"], dependencies=[Depends(get_current_tenant)])
 
@@ -41,6 +42,13 @@ def _out(inv, db=None) -> InvoiceOut:
         )
         for wo in inv.writeoffs
     ]
+    payments = [
+        PaymentOut(
+            id=p.id, invoiceId=p.invoice_id, amount=p.amount, paidDate=p.paid_date,
+            method=p.method, notes=p.notes, recordedBy=p.recorded_by, createdAt=p.created_at,
+        )
+        for p in inv.payments
+    ]
     meter_photos = []
     if db is not None:
         meter_photos = [
@@ -58,7 +66,10 @@ def _out(inv, db=None) -> InvoiceOut:
         waterAmount=inv.water_amount, totalPayable=inv.total_payable,
         paid=inv.paid, paidDate=inv.paid_date, createdAt=inv.created_at,
         writeOffs=write_offs,
+        payments=payments,
         netPayable=invoice_service.net_payable(inv),
+        totalPaid=invoice_service.total_paid(inv),
+        outstanding=invoice_service.outstanding(inv),
         meterPhotos=meter_photos,
     )
 
@@ -143,6 +154,27 @@ def get_my_invoice_pdf(
     except PdfUnavailableError as e:
         raise HTTPException(status_code=501, detail=str(e))
     filename = f"invoice-{inv.invoice_date}.pdf"
+    return Response(
+        content=pdf_bytes, media_type="application/pdf",
+        headers={"Content-Disposition": f'inline; filename="{filename}"'},
+    )
+
+
+@router.get("/invoices/{invoice_id}/payments/{payment_id}/receipt.pdf")
+def get_my_payment_receipt_pdf(
+    invoice_id: str, payment_id: str,
+    tenant_user: TenantUser = Depends(get_current_tenant), db: Session = Depends(get_db),
+):
+    inv = _owned_invoice_or_404(db, tenant_user, invoice_id)
+    payment = next((p for p in inv.payments if p.id == payment_id), None)
+    if not payment:
+        raise HTTPException(status_code=404, detail="Payment not found")
+    settings_row = settings_service.get_or_create(db)
+    try:
+        pdf_bytes = render_payment_receipt_pdf(payment, inv, inv.tenant, settings_row)
+    except PdfUnavailableError as e:
+        raise HTTPException(status_code=501, detail=str(e))
+    filename = f"receipt-{payment.paid_date}.pdf"
     return Response(
         content=pdf_bytes, media_type="application/pdf",
         headers={"Content-Disposition": f'inline; filename="{filename}"'},

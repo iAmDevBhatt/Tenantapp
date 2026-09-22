@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<style>
+  @page { size: A4; margin: 0; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: "DejaVu Sans", Arial, sans-serif;
+    color: #1e293b;
+    background: #ffffff;
+    font-size: 12px;
+  }
+  .sheet { padding: 0 0 28px 0; }
+
+  .banner {
+    background: #1d3a8a;
+    background: linear-gradient(135deg, #1d3a8a 0%, #2547ad 100%);
+    color: #ffffff;
+    padding: 28px 36px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+  }
+  .banner .icon-fallback {
+    width: 56px; height: 56px; border-radius: 10px;
+    background: rgba(255,255,255,0.15);
+    border: 2px solid rgba(255,255,255,0.6);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 26px;
+  }
+  .banner h1 { margin: 0; font-size: 20px; font-weight: 700; letter-spacing: 0.2px; }
+  .banner .date { margin-top: 4px; font-size: 12px; color: #dbe4ff; }
+
+  .content { padding: 24px 36px 0 36px; }
+
+  .section-title {
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+    color: #1d3a8a;
+    margin: 20px 0 8px 0;
+    border-bottom: 2px solid #dbe4ff;
+    padding-bottom: 6px;
+  }
+
+  .tenant-info p { margin: 2px 0; line-height: 1.5; }
+  .tenant-info .name { font-size: 15px; font-weight: 700; color: #0f172a; }
+  .tenant-info .address { color: #475569; white-space: pre-line; }
+
+  .dues-row { display: flex; justify-content: space-between; padding: 6px 0; font-size: 13px; }
+  .dues-row .label { color: #475569; }
+  .dues-row .value { font-weight: 600; }
+
+  .total-bar {
+    margin-top: 10px;
+    background: #eef2ff;
+    border: 1px solid #c7d2fe;
+    border-radius: 8px;
+    padding: 12px 16px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .total-bar .label { font-size: 13px; font-weight: 700; color: #1d3a8a; }
+  .total-bar .value { font-size: 20px; font-weight: 800; color: #1d3a8a; }
+
+  .notes {
+    margin-top: 20px;
+    font-size: 10.5px;
+    color: #64748b;
+    line-height: 1.6;
+    border-top: 1px dashed #cbd5e1;
+    padding-top: 10px;
+  }
+</style>
+</head>
+<body>
+  <div class="sheet">
+    <div class="banner">
+      <div class="icon-fallback">&#9989;</div>
+      <div>
+        <h1>Payment Receipt</h1>
+        <div class="date">{{ payment.paid_date.strftime('%d %B %Y') }}</div>
+      </div>
+    </div>
+
+    <div class="content">
+      <div class="section-title">Received From</div>
+      <div class="tenant-info">
+        <p class="name">{{ tenant.name }}</p>
+        <p class="address">{{ tenant.property_address }}</p>
+      </div>
+
+      <div class="section-title">Payment Details</div>
+      <div class="dues-row">
+        <span class="label">For invoice dated</span>
+        <span class="value">{{ invoice.invoice_date.strftime('%d %B %Y') }}</span>
+      </div>
+      {% if payment.method %}
+      <div class="dues-row">
+        <span class="label">Method</span>
+        <span class="value">{{ payment.method }}</span>
+      </div>
+      {% endif %}
+      {% if payment.notes %}
+      <div class="dues-row">
+        <span class="label">Notes</span>
+        <span class="value">{{ payment.notes }}</span>
+      </div>
+      {% endif %}
+      <div class="total-bar">
+        <span class="label">Amount Received</span>
+        <span class="value">&#8377;{{ '%.2f'|format(payment.amount) }}</span>
+      </div>
+
+      <div class="section-title" style="margin-top:20px;">Invoice Balance</div>
+      <div class="dues-row">
+        <span class="label">Net payable (after any write-offs)</span>
+        <span class="value">&#8377;{{ '%.2f'|format(net_payable) }}</span>
+      </div>
+      <div class="dues-row">
+        <span class="label">Total received to date</span>
+        <span class="value">&#8377;{{ '%.2f'|format(total_paid) }}</span>
+      </div>
+      <div class="dues-row">
+        <span class="label">Outstanding balance</span>
+        <span class="value">&#8377;{{ '%.2f'|format(outstanding) }}</span>
+      </div>
+
+      <div class="notes">
+        {% if payee_name %}Received by {{ payee_name }}.{% endif %}
+        This receipt confirms the payment above was received against the invoice dated {{ invoice.invoice_date.strftime('%d %B %Y') }}.
+      </div>
+    </div>
+  </div>
+</body>
+</html>

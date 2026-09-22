@@ -23,6 +23,24 @@ export interface WriteOffCreateInput {
   reason: string
 }
 
+export interface Payment {
+  id: string
+  invoiceId: string
+  amount: string
+  paidDate: string
+  method: string | null
+  notes: string | null
+  recordedBy: string | null
+  createdAt: string
+}
+
+export interface PaymentCreateInput {
+  amount: string
+  paidDate?: string
+  method?: string
+  notes?: string
+}
+
 export interface Invoice {
   id: string
   tenantId: string
@@ -50,10 +68,11 @@ export interface Invoice {
 
   paid: boolean
   paidDate: string | null
-  amountPaid: string | null
   createdAt: string
   writeOffs: WriteOff[]
+  payments: Payment[]
   netPayable: string
+  totalPaid: string
   outstanding: string
   meterPhotos: MeterPhoto[]
 }

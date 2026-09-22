@@ -12,9 +12,11 @@ from jinja2 import Environment, FileSystemLoader
 
 from backend.core.config import settings
 from backend.models.invoice import Invoice
+from backend.models.invoice_payment import InvoicePayment
 from backend.models.tenant import Tenant
 from backend.models.settings import AppSettings
 from backend.services.qr_service import build_upi_uri, generate_qr_png_bytes
+from backend.services import invoice_service
 
 try:
     from weasyprint import HTML
@@ -89,4 +91,26 @@ def render_invoice_pdf(invoice: Invoice, tenant: Tenant, app_settings: AppSettin
     )
     # All images are inlined as base64 data URIs -- no relative asset refs, so
     # no base_url is needed and the render is fully self-contained.
+    return HTML(string=html_str).write_pdf()
+
+
+def render_payment_receipt_pdf(payment: InvoicePayment, invoice: Invoice, tenant: Tenant, app_settings: AppSettings) -> bytes:
+    """No QR here -- unlike the invoice PDF, a receipt confirms money
+    already received, so there's nothing left to pay via the code."""
+    if HTML is None:
+        raise PdfUnavailableError(
+            "PDF generation unavailable in this environment; install WeasyPrint's "
+            "system libraries or run via Docker/WSL -- see DEVELOPER.md"
+        )
+
+    html_str = _jinja_env.get_template("receipt.html").render(
+        payment=payment,
+        invoice=invoice,
+        tenant=tenant,
+        settings=app_settings,
+        payee_name=invoice.payee_name,
+        net_payable=invoice_service.net_payable(invoice),
+        total_paid=invoice_service.total_paid(invoice),
+        outstanding=invoice_service.outstanding(invoice),
+    )
     return HTML(string=html_str).write_pdf()

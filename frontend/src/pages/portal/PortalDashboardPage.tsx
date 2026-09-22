@@ -286,7 +286,7 @@ export default function PortalDashboardPage() {
           <div className="card divide-y divide-slate-200 dark:divide-slate-800">
             {invoices.map((inv) => {
               const outstanding = parseFloat(inv.outstanding || '0')
-              const isPartial = !inv.paid && inv.amountPaid !== null
+              const isPartial = !inv.paid && inv.payments.length > 0
               return (
                 <Link
                   key={inv.id}

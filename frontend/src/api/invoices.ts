@@ -1,5 +1,5 @@
 import { adminClient } from './adminClient'
-import { Invoice, InvoiceCreateInput, WriteOffCreateInput } from '@/types/invoice'
+import { Invoice, InvoiceCreateInput, WriteOffCreateInput, PaymentCreateInput } from '@/types/invoice'
 
 export const invoicesApi = {
   listForTenant: (tenantId: string) =>
@@ -16,8 +16,14 @@ export const invoicesApi = {
   togglePaid: (id: string, paid: boolean, paidDate?: string) =>
     adminClient.post<Invoice>(`/invoices/${id}/toggle-paid`, { paid, paidDate }).then((r) => r.data),
 
-  recordPayment: (id: string, amountPaid: number) =>
-    adminClient.patch<Invoice>(`/invoices/${id}/payment`, { amountPaid }).then((r) => r.data),
+  addPayment: (invoiceId: string, data: PaymentCreateInput) =>
+    adminClient.post<Invoice>(`/invoices/${invoiceId}/payments`, data).then((r) => r.data),
+
+  deletePayment: (invoiceId: string, paymentId: string) =>
+    adminClient.delete<Invoice>(`/invoices/${invoiceId}/payments/${paymentId}`).then((r) => r.data),
+
+  paymentReceiptUrl: (invoiceId: string, paymentId: string) =>
+    `/invoices/${invoiceId}/payments/${paymentId}/receipt.pdf`,
 
   delete: (id: string) => adminClient.delete(`/invoices/${id}`),
 

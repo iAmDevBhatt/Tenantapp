@@ -68,18 +68,22 @@ def net_payable(invoice: Invoice) -> Decimal:
     return _q(Decimal(str(invoice.total_payable)) - total_written_off)
 
 
+def total_paid(invoice: Invoice) -> Decimal:
+    total = sum(Decimal(str(p.amount)) for p in invoice.payments)
+    return _q(Decimal("0") + total)
+
+
 def outstanding(invoice: Invoice) -> Decimal:
     """Amount still owed: netPayable minus what has already been received.
     Returns 0 if the invoice is fully paid."""
     if invoice.paid:
         return _q(Decimal("0"))
-    paid = _q(Decimal(str(invoice.amount_paid))) if invoice.amount_paid is not None else _q(Decimal("0"))
-    return _q(max(net_payable(invoice) - paid, Decimal("0")))
+    return _q(max(net_payable(invoice) - total_paid(invoice), Decimal("0")))
 
 
 def check_can_create_invoice(db: Session, tenant: Tenant) -> None:
     """Raise 422 if the tenant's last invoice has no payment record at all.
-    Having paid=True, a recorded amount_paid, or any write-off satisfies the gate."""
+    Having paid=True, at least one recorded payment, or any write-off satisfies the gate."""
     last = (
         db.query(Invoice)
         .filter(Invoice.tenant_id == tenant.id)
@@ -90,7 +94,7 @@ def check_can_create_invoice(db: Session, tenant: Tenant) -> None:
         return
     if last.paid:
         return
-    if last.amount_paid is not None:
+    if last.payments:
         return
     if last.writeoffs:
         return
@@ -236,10 +240,39 @@ def delete_invoice(db: Session, invoice: Invoice) -> None:
     db.commit()
 
 
-def record_payment(db: Session, invoice: Invoice, amount_paid: Decimal) -> Invoice:
-    if amount_paid < Decimal("0") or amount_paid > net_payable(invoice):
-        raise HTTPException(status_code=422, detail=f"Amount must be between 0 and {net_payable(invoice)}")
-    invoice.amount_paid = _q(amount_paid)
+def add_payment(
+    db: Session,
+    invoice: Invoice,
+    amount: Decimal,
+    paid_date: date | None,
+    method: str | None,
+    notes: str | None,
+    recorded_by: str | None,
+) -> Invoice:
+    from backend.models.invoice_payment import InvoicePayment
+    owed = outstanding(invoice)
+    if amount <= Decimal("0") or amount > owed:
+        raise HTTPException(status_code=422, detail=f"Amount must be between 0.01 and {owed}")
+    payment = InvoicePayment(
+        invoice_id=invoice.id,
+        amount=_q(amount),
+        paid_date=paid_date or date.today(),
+        method=method,
+        notes=notes,
+        recorded_by=recorded_by,
+    )
+    db.add(payment)
+    db.commit()
+    db.refresh(invoice)
+    return invoice
+
+
+def delete_payment(db: Session, invoice: Invoice, payment_id: str) -> Invoice:
+    from backend.models.invoice_payment import InvoicePayment
+    payment = db.get(InvoicePayment, payment_id)
+    if not payment or payment.invoice_id != invoice.id:
+        raise HTTPException(status_code=404, detail="Payment not found")
+    db.delete(payment)
     db.commit()
     db.refresh(invoice)
     return invoice
