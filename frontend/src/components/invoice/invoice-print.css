@@ -60,6 +60,35 @@
 .inv-table .inv-num { text-align: right; }
 .inv-table .inv-desc { font-weight: 600; }
 
+/* Below ~480px a 6-column table doesn't fit (the rightmost "Amount" column
+   gets clipped off-screen). Reflow each row into a stacked label:value card
+   instead of a horizontally-scrolling table -- a standard CSS-only
+   responsive-table technique using the data-label attributes set in
+   InvoiceDocument.tsx. Screen-only; the PDF template is unaffected (fixed
+   A4 page width, no reflow needed there). */
+@media (max-width: 480px) {
+  .inv-table thead { display: none; }
+  .inv-table, .inv-table tbody, .inv-table tr, .inv-table td { display: block; width: 100%; }
+  .inv-table tr {
+    border: 1px solid #e2e8f0; border-radius: 8px; padding: 4px 10px; margin-bottom: 8px;
+  }
+  .inv-table td {
+    display: flex; justify-content: space-between; align-items: center; gap: 12px;
+    padding: 6px 0; border-bottom: 1px solid #f1f5f9;
+  }
+  .inv-table tr td:last-child { border-bottom: none; }
+  .inv-table td::before {
+    content: attr(data-label); font-size: 10px; font-weight: 600; text-transform: uppercase;
+    color: #64748b; flex-shrink: 0;
+  }
+  .inv-table .inv-desc {
+    background: #f8fafc; margin: -4px -10px 0 -10px; padding: 8px 10px;
+    border-bottom: 1px solid #e2e8f0; border-radius: 8px 8px 0 0;
+  }
+  .inv-table .inv-desc::before { content: none; }
+  .inv-table .inv-num { text-align: left; }
+}
+
 .inv-dues-row { display: flex; justify-content: space-between; padding: 6px 0; font-size: 13px; }
 .inv-dues-row .inv-label { color: #475569; }
 .inv-dues-row .inv-value { font-weight: 600; }

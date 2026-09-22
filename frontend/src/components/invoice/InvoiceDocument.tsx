@@ -56,20 +56,20 @@ export default function InvoiceDocument({ invoice, tenantName, tenantAddress, qr
           </thead>
           <tbody>
             <tr>
-              <td className="inv-desc">{l('invoice.row.roomMeter', 'Room Meter (A)')}</td>
-              <td className="inv-num">{Math.floor(parseFloat(invoice.roomStart))}</td>
-              <td className="inv-num">{Math.floor(parseFloat(invoice.roomEnd))}</td>
-              <td className="inv-num">{Math.floor(parseFloat(invoice.roomUsage))}</td>
-              <td className="inv-num">{formatINR(invoice.roomRate)}</td>
-              <td className="inv-num">{formatINR(invoice.roomAmount)}</td>
+              <td className="inv-desc" data-label={l('invoice.table.header.description', 'Description')}>{l('invoice.row.roomMeter', 'Room Meter (A)')}</td>
+              <td className="inv-num" data-label={l('invoice.table.header.start', 'Opening Reading')}>{Math.floor(parseFloat(invoice.roomStart))}</td>
+              <td className="inv-num" data-label={l('invoice.table.header.end', 'Closing Reading')}>{Math.floor(parseFloat(invoice.roomEnd))}</td>
+              <td className="inv-num" data-label={l('invoice.table.header.usage', 'Usage')}>{Math.floor(parseFloat(invoice.roomUsage))}</td>
+              <td className="inv-num" data-label={l('invoice.table.header.rate', 'Rate')}>{formatINR(invoice.roomRate)}</td>
+              <td className="inv-num" data-label={l('invoice.table.header.amount', 'Amount')}>{formatINR(invoice.roomAmount)}</td>
             </tr>
             <tr>
-              <td className="inv-desc">{l('invoice.row.waterMeter', 'Water Meter (B)')}</td>
-              <td className="inv-num">{Math.floor(parseFloat(invoice.waterStart))}</td>
-              <td className="inv-num">{Math.floor(parseFloat(invoice.waterEnd))}</td>
-              <td className="inv-num">{Math.floor(parseFloat(invoice.waterUsage))}</td>
-              <td className="inv-num">{formatINR(invoice.waterRate)}</td>
-              <td className="inv-num">{formatINR(invoice.waterAmount)}</td>
+              <td className="inv-desc" data-label={l('invoice.table.header.description', 'Description')}>{l('invoice.row.waterMeter', 'Water Meter (B)')}</td>
+              <td className="inv-num" data-label={l('invoice.table.header.start', 'Opening Reading')}>{Math.floor(parseFloat(invoice.waterStart))}</td>
+              <td className="inv-num" data-label={l('invoice.table.header.end', 'Closing Reading')}>{Math.floor(parseFloat(invoice.waterEnd))}</td>
+              <td className="inv-num" data-label={l('invoice.table.header.usage', 'Usage')}>{Math.floor(parseFloat(invoice.waterUsage))}</td>
+              <td className="inv-num" data-label={l('invoice.table.header.rate', 'Rate')}>{formatINR(invoice.waterRate)}</td>
+              <td className="inv-num" data-label={l('invoice.table.header.amount', 'Amount')}>{formatINR(invoice.waterAmount)}</td>
             </tr>
           </tbody>
         </table>
