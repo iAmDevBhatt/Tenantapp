@@ -389,17 +389,35 @@ function MeterSubmissionCard({
   onReject: (ms: MeterSubmission) => void
   l: (key: string, fallback: string) => string
 }) {
+  const [photoSrc, setPhotoSrc] = useState<string | null>(null)
+
+  useEffect(() => {
+    let url: string | null = null
+    fetchAuthedBlob(adminClient, meterSubmissionsApi.previewPhotoUrl(tenantId, ms.id))
+      .then((u) => {
+        url = u
+        setPhotoSrc(u)
+      })
+      .catch(() => setPhotoSrc(null))
+    return () => {
+      if (url) URL.revokeObjectURL(url)
+    }
+  }, [tenantId, ms.id])
+
   return (
     <div className="border border-slate-200 dark:border-slate-700 rounded-lg overflow-hidden">
       <div className="relative bg-slate-100 dark:bg-slate-800 h-40">
-        <img
-          src={meterSubmissionsApi.previewPhotoUrl(tenantId, ms.id)}
-          alt={ms.originalFilename}
-          className="w-full h-full object-cover"
-          onError={(e) => {
-            (e.target as HTMLImageElement).style.display = 'none'
-          }}
-        />
+        {photoSrc ? (
+          <img
+            src={photoSrc}
+            alt={ms.originalFilename}
+            className="w-full h-full object-cover"
+          />
+        ) : (
+          <div className="w-full h-full flex items-center justify-center text-slate-400 text-xs">
+            {l('status.loading', 'Loading…')}
+          </div>
+        )}
       </div>
       <div className="p-3 space-y-2">
         <div className="flex items-center justify-between gap-2">

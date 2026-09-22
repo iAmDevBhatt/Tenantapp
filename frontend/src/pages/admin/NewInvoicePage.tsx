@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
+import { adminClient } from '@/api/adminClient'
 import { tenantsApi } from '@/api/tenants'
 import { errorMessage } from '@/api/client'
 import { invoicesApi } from '@/api/invoices'
@@ -8,6 +9,7 @@ import { Tenant } from '@/types/tenant'
 import { Invoice } from '@/types/invoice'
 import { MeterSubmission } from '@/types/meterSubmission'
 import { computeInvoicePreview, formatINR } from '@/utils/formulas'
+import { fetchAuthedBlob } from '@/utils/blob'
 import { useLabels } from '@/hooks/useLabels'
 
 const PHOTO_TYPE_LABELS: Record<string, string> = {
@@ -23,6 +25,7 @@ export default function NewInvoicePage() {
   const [tenant, setTenant] = useState<Tenant | null>(null)
   const [blockingInvoice, setBlockingInvoice] = useState<Invoice | null>(null)
   const [approvedPhotos, setApprovedPhotos] = useState<MeterSubmission[]>([])
+  const [photoSrcs, setPhotoSrcs] = useState<Map<string, string>>(new Map())
   const [selectedPhotoIds, setSelectedPhotoIds] = useState<string[]>([])
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -39,18 +42,27 @@ export default function NewInvoicePage() {
   useEffect(() => {
     if (!tenantId) return
     setLoading(true)
+    const photoUrls: string[] = []
     Promise.all([
       tenantsApi.get(tenantId),
       tenantsApi.nextInvoiceDefaults(tenantId),
       invoicesApi.listForTenant(tenantId),
       meterSubmissionsApi.listForTenant(tenantId, 'approved'),
     ])
-      .then(([t, defaults, invoices, photos]) => {
+      .then(async ([t, defaults, invoices, photos]) => {
         setTenant(t)
         setRoomStart(defaults.roomStart)
         setWaterStart(defaults.waterStart)
         setPreviousDues(defaults.previousDues)
         setApprovedPhotos(photos)
+
+        const srcMap = new Map<string, string>()
+        for (const ms of photos) {
+          const url = await fetchAuthedBlob(adminClient, meterSubmissionsApi.previewPhotoUrl(tenantId, ms.id))
+          photoUrls.push(url)
+          srcMap.set(ms.id, url)
+        }
+        setPhotoSrcs(srcMap)
 
         // Detect if the most recent invoice blocks creation (no payment, not paid, no write-offs)
         if (invoices.length > 0) {
@@ -60,6 +72,10 @@ export default function NewInvoicePage() {
         }
       })
       .finally(() => setLoading(false))
+
+    return () => {
+      photoUrls.forEach((u) => URL.revokeObjectURL(u))
+    }
   }, [tenantId])
 
   function togglePhoto(id: string) {
@@ -140,14 +156,17 @@ export default function NewInvoicePage() {
                       : 'border-slate-200 dark:border-slate-700 hover:border-slate-400'
                   }`}
                 >
-                  <img
-                    src={meterSubmissionsApi.previewPhotoUrl(tenantId!, ms.id)}
-                    alt={ms.originalFilename}
-                    className="w-24 h-24 object-cover"
-                    onError={(e) => {
-                      (e.target as HTMLImageElement).src = ''
-                    }}
-                  />
+                  {photoSrcs.get(ms.id) ? (
+                    <img
+                      src={photoSrcs.get(ms.id)}
+                      alt={ms.originalFilename}
+                      className="w-24 h-24 object-cover"
+                    />
+                  ) : (
+                    <div className="w-24 h-24 flex items-center justify-center text-slate-400 text-xs">
+                      {l('status.loading', 'Loading…')}
+                    </div>
+                  )}
                   <div className="absolute bottom-0 left-0 right-0 bg-black/50 text-white text-xs text-center py-0.5 truncate px-1">
                     {PHOTO_TYPE_LABELS[ms.photoType] ?? ms.photoType}
                   </div>
