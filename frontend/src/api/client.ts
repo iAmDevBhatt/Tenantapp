@@ -1,4 +1,5 @@
 import axios, { AxiosInstance } from 'axios'
+import { safeStorage } from '@/lib/safeStorage'
 
 /** Creates an axios instance bound to a specific localStorage token key and a
  * specific redirect target on 401. Two independent instances (admin + portal)
@@ -8,7 +9,7 @@ export function createApiClient(tokenKey: string, loginPath: string, redirectOn4
   const instance = axios.create({ baseURL: '/api' })
 
   instance.interceptors.request.use((config) => {
-    const token = localStorage.getItem(tokenKey)
+    const token = safeStorage.getItem(tokenKey)
     if (token) {
       config.headers.Authorization = `Bearer ${token}`
     }
@@ -20,7 +21,7 @@ export function createApiClient(tokenKey: string, loginPath: string, redirectOn4
     (error) => {
       const status = error.response?.status
       if (status === 401 || (redirectOn403 && status === 403)) {
-        localStorage.removeItem(tokenKey)
+        safeStorage.removeItem(tokenKey)
         if (window.location.pathname !== loginPath) {
           window.location.href = loginPath
         }

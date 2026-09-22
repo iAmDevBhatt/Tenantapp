@@ -3,6 +3,7 @@ import { ADMIN_TOKEN_KEY } from '@/api/adminClient'
 import { TENANT_TOKEN_KEY } from '@/api/portalClient'
 import { authApi } from '@/api/auth'
 import { portalAuthApi } from '@/api/portalAuth'
+import { safeStorage } from '@/lib/safeStorage'
 
 interface AuthContextValue {
   adminAuthed: boolean
@@ -18,34 +19,34 @@ interface AuthContextValue {
 const AuthContext = createContext<AuthContextValue | null>(null)
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [adminAuthed, setAdminAuthed] = useState<boolean>(!!localStorage.getItem(ADMIN_TOKEN_KEY))
-  const [tenantAuthed, setTenantAuthed] = useState<boolean>(!!localStorage.getItem(TENANT_TOKEN_KEY))
+  const [adminAuthed, setAdminAuthed] = useState<boolean>(!!safeStorage.getItem(ADMIN_TOKEN_KEY))
+  const [tenantAuthed, setTenantAuthed] = useState<boolean>(!!safeStorage.getItem(TENANT_TOKEN_KEY))
 
   const adminLogin = useCallback(async (username: string, password: string) => {
     const { accessToken } = await authApi.login(username, password)
-    localStorage.setItem(ADMIN_TOKEN_KEY, accessToken)
+    safeStorage.setItem(ADMIN_TOKEN_KEY, accessToken)
     setAdminAuthed(true)
   }, [])
 
   const adminLogout = useCallback(() => {
-    localStorage.removeItem(ADMIN_TOKEN_KEY)
+    safeStorage.removeItem(ADMIN_TOKEN_KEY)
     setAdminAuthed(false)
   }, [])
 
   const tenantLogin = useCallback(async (username: string, password: string) => {
     const { accessToken } = await portalAuthApi.login(username, password)
-    localStorage.setItem(TENANT_TOKEN_KEY, accessToken)
+    safeStorage.setItem(TENANT_TOKEN_KEY, accessToken)
     setTenantAuthed(true)
   }, [])
 
   const tenantRegister = useCallback(async (code: string, username: string, password: string) => {
     const { accessToken } = await portalAuthApi.register(code, username, password)
-    localStorage.setItem(TENANT_TOKEN_KEY, accessToken)
+    safeStorage.setItem(TENANT_TOKEN_KEY, accessToken)
     setTenantAuthed(true)
   }, [])
 
   const tenantLogout = useCallback(() => {
-    localStorage.removeItem(TENANT_TOKEN_KEY)
+    safeStorage.removeItem(TENANT_TOKEN_KEY)
     setTenantAuthed(false)
   }, [])
 
