@@ -67,6 +67,8 @@ Legend: **A** = admin JWT required, **T** = tenant JWT required, **P** = public.
 | GET | `/api/tenants/{id}/profile-photo` | A | streams the profile photo |
 | DELETE | `/api/tenants/{id}/profile-photo` | A | removes file + clears column |
 | PATCH | `/api/tenants/{id}/portal-block` | A | toggle `portal_access_blocked` on `TenantUser`; 400 if no portal account |
+| DELETE | `/api/tenants/{id}/portal-account` | A | delete the `TenantUser` row; 400 if none; frees the tenant to register again via a new invite |
+| POST | `/api/tenants/{id}/portal-account/reset-password` | A | generates a random password, saves it, returns `{password}` once; 400 if no portal account |
 | GET/POST/DELETE | `/api/tenants/{id}/invite` | A | get / generate (regenerate replaces) / revoke |
 | GET | `/api/properties` | A | list all properties with their flats |
 | POST | `/api/properties` | A | create property |

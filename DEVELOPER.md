@@ -161,6 +161,8 @@ All user-visible strings live in `frontend/public/labels.properties` (Java `.pro
 
 **"table tenants has no column named profile_photo_path"** — the DB existed before the new columns were added. Stop the app, then run `python -m backend.migrate` (or just restart via `start.ps1` — the migration runs automatically on boot).
 
+**Portal goes blank after a form error** — check whether the code that renders the error message reads `err.response.data.detail` directly. FastAPI returns `detail` as a string for most errors but as an array of `{loc,msg,type}` objects on 422 validation failures; rendering that array as a React child throws. Always use `errorMessage(err, fallback)` from `frontend/src/api/client.ts` instead of reading `.detail` inline. A top-level `ErrorBoundary` (`main.tsx`) now catches any such crash and shows a recoverable screen instead of a blank page, but the underlying bug should still be fixed at the source.
+
 ## How To (common tasks)
 
 **Add a new tenant field**: add the column to `models/tenant.py` + a guarded `_add_column_if_missing` step in `migrate.py` + the field in `schemas/tenant.py` + wire it through `routers/tenants.py`'s `_tenant_out`/create/update + `frontend/src/types/tenant.ts` + `TenantForm.tsx` + `TenantDetailPage.tsx` (read-only view).
@@ -183,7 +185,7 @@ See README's Quick Start. Key facts: two-stage build (`node:20-alpine` → `pyth
 
 ## PWA
 
-`frontend/vite.config.ts` — `vite-plugin-pwa`, `registerType: autoUpdate`, manifest with 192/512/512-maskable icons (placeholder icons under `frontend/public/icons/` — replace with real branding art before shipping to tenants). `NetworkFirst` runtime caching for `/api/*`.
+`frontend/vite.config.ts` — `vite-plugin-pwa`, `registerType: autoUpdate`, manifest with 192/512/512-maskable icons (placeholder icons under `frontend/public/icons/` — replace with real branding art before shipping to tenants). `NetworkFirst` runtime caching for `/api/*`. `workbox.navigateFallback` is explicitly set to `undefined` — the plugin's default (`'index.html'`) precaches a `NavigationRoute` that serves the app shell for every hard navigation from cache, which can strand a browser on a stale build indefinitely after a redeploy. Don't re-enable it.
 
 ## Security Notes
 
