@@ -24,6 +24,14 @@ export default defineConfig({
         ],
       },
       workbox: {
+        // vite-plugin-pwa defaults navigateFallback to 'index.html', which binds
+        // ALL navigation requests (hard loads/refreshes) to the precached app
+        // shell from whenever the service worker last updated -- serving a
+        // stale, possibly backend-incompatible build indefinitely instead of
+        // hitting the network. This app always needs a live connection for its
+        // API calls anyway, so there's no value in an offline app shell; every
+        // navigation should just go to the network like a normal page load.
+        navigateFallback: undefined,
         runtimeCaching: [
           {
             urlPattern: /^https?.*\/api\/.*/,
