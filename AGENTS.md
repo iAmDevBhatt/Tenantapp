@@ -65,4 +65,5 @@ docker compose up -d --build
 - Frontend API calls go through `frontend/src/api/*.ts` modules, never inline `axios` calls in components.
 - All money amounts are Decimal server-side, strings over the wire (Pydantic `Decimal` fields), parsed to `number` client-side only for display/preview math (`utils/formulas.ts`).
 - Binary resources (images, PDFs, zips) are fetched via `fetchAuthedBlob(client, url)` in `utils/blob.ts` — plain `<img src>` / `<a href>` can't send the `Authorization` header.
+- Full-size photo viewing uses `frontend/src/components/PhotoLightbox.tsx`, a generic click-to-enlarge overlay (Escape/backdrop-click/× to close) — reuse it for any thumbnail that already has a `fetchAuthedBlob` object-URL in state, rather than building another modal.
 - **Update the relevant `.md` docs in the same commit as any behavior/architecture change** — new/changed endpoints go in `AI_GUIDE.md` §5, new gotchas go in this file's Architecture gotchas, PWA/Docker/security notes go in `DEVELOPER.md`. Don't push code changes with stale docs.

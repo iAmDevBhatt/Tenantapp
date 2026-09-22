@@ -17,6 +17,8 @@ export const meterSubmissionsApi = {
   portalMeterPhotoUrl: (invoiceId: string, photoId: string) =>
     `/portal/invoices/${invoiceId}/meter-photos/${photoId}`,
 
+  portalSubmissionPhotoUrl: (msId: string) => `/portal/meter-submissions/${msId}/photo`,
+
   // Admin
   listForTenant: (tenantId: string, status?: string): Promise<MeterSubmission[]> => {
     const params = status ? `?status=${status}` : ''

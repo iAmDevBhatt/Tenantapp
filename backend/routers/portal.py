@@ -249,6 +249,21 @@ def list_my_meter_submissions(
     return [_ms_out(ms) for ms in rows]
 
 
+@router.get("/meter-submissions/{ms_id}/photo")
+def get_my_meter_submission_photo(
+    ms_id: str, tenant_user: TenantUser = Depends(get_current_tenant), db: Session = Depends(get_db)
+):
+    ms = db.query(MeterSubmission).filter(
+        MeterSubmission.id == ms_id,
+        MeterSubmission.tenant_id == tenant_user.tenant_id,
+    ).first()
+    if not ms:
+        raise HTTPException(status_code=404, detail="Meter submission not found")
+    path = document_service.meter_submission_absolute_path(ms)
+    mime = ms.content_type or mimetypes.guess_type(ms.original_filename)[0] or "image/jpeg"
+    return FileResponse(path, media_type=mime)
+
+
 @router.get("/invoices/{invoice_id}/meter-photos/{photo_id}")
 def get_invoice_meter_photo(
     invoice_id: str,

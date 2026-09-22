@@ -13,6 +13,7 @@ import TenantForm from '@/components/TenantForm'
 import TenantAvatar from '@/components/TenantAvatar'
 import DocumentList from '@/components/DocumentList'
 import InviteCodeCard from '@/components/InviteCodeCard'
+import PhotoLightbox from '@/components/PhotoLightbox'
 import { useLabels } from '@/hooks/useLabels'
 
 type Tab = 'profile' | 'documents' | 'invoices' | 'invite' | 'meter'
@@ -390,6 +391,7 @@ function MeterSubmissionCard({
   l: (key: string, fallback: string) => string
 }) {
   const [photoSrc, setPhotoSrc] = useState<string | null>(null)
+  const [expanded, setExpanded] = useState(false)
 
   useEffect(() => {
     let url: string | null = null
@@ -411,7 +413,9 @@ function MeterSubmissionCard({
           <img
             src={photoSrc}
             alt={ms.originalFilename}
-            className="w-full h-full object-cover"
+            className="w-full h-full object-cover cursor-pointer"
+            onClick={() => setExpanded(true)}
+            title={l('meter.viewFull', 'Click to view full size')}
           />
         ) : (
           <div className="w-full h-full flex items-center justify-center text-slate-400 text-xs">
@@ -419,6 +423,9 @@ function MeterSubmissionCard({
           </div>
         )}
       </div>
+      {expanded && photoSrc && (
+        <PhotoLightbox src={photoSrc} alt={ms.originalFilename} onClose={() => setExpanded(false)} />
+      )}
       <div className="p-3 space-y-2">
         <div className="flex items-center justify-between gap-2">
           <div>

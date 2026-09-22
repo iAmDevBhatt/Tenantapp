@@ -9,6 +9,7 @@ import { TenantDocument } from '@/types/tenant'
 import { PortalMe } from '@/types/settings'
 import { formatINR } from '@/utils/formulas'
 import { fetchAuthedBlob, triggerBlobDownload } from '@/utils/blob'
+import PhotoLightbox from '@/components/PhotoLightbox'
 import { useLabels } from '@/hooks/useLabels'
 
 function ProfileRow({ label, value }: { label: string; value: string }) {
@@ -41,6 +42,8 @@ export default function PortalDashboardPage() {
   const [photoSrc, setPhotoSrc] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [submissions, setSubmissions] = useState<MeterSubmission[]>([])
+  const [submissionPhotoSrcs, setSubmissionPhotoSrcs] = useState<Map<string, string>>(new Map())
+  const [expandedPhoto, setExpandedPhoto] = useState<{ src: string; alt: string } | null>(null)
   const [uploadingType, setUploadingType] = useState<string | null>(null)
   const flatInputRef = useRef<HTMLInputElement>(null)
   const waterInputRef = useRef<HTMLInputElement>(null)
@@ -57,6 +60,7 @@ export default function PortalDashboardPage() {
 
   useEffect(() => {
     let photoUrl: string | null = null
+    const submissionUrls: string[] = []
     Promise.all([
       portalApi.me(),
       portalApi.listInvoices(),
@@ -72,10 +76,18 @@ export default function PortalDashboardPage() {
           photoUrl = await fetchAuthedBlob(portalClient, portalApi.profilePhotoUrl())
           setPhotoSrc(photoUrl)
         }
+        const srcMap = new Map<string, string>()
+        for (const ms of subs) {
+          const url = await fetchAuthedBlob(portalClient, meterSubmissionsApi.portalSubmissionPhotoUrl(ms.id))
+          submissionUrls.push(url)
+          srcMap.set(ms.id, url)
+        }
+        setSubmissionPhotoSrcs(srcMap)
       })
       .finally(() => setLoading(false))
     return () => {
       if (photoUrl) URL.revokeObjectURL(photoUrl)
+      submissionUrls.forEach((u) => URL.revokeObjectURL(u))
     }
   }, [])
 
@@ -228,27 +240,51 @@ export default function PortalDashboardPage() {
           <p className="text-sm text-slate-500">{l('meter.noSubmissions', 'No photos submitted yet')}</p>
         ) : (
           <ul className="divide-y divide-slate-200 dark:divide-slate-800">
-            {submissions.map((ms) => (
-              <li key={ms.id} className="py-2 flex items-center justify-between gap-2">
-                <div className="min-w-0">
-                  <p className="text-sm font-medium">{PHOTO_TYPE_LABELS[ms.photoType] ?? ms.photoType}</p>
-                  <p className="text-xs text-slate-500">
-                    {new Date(ms.submittedAt).toLocaleDateString('en-IN', {
-                      day: '2-digit', month: 'short', year: 'numeric',
-                    })}
-                    {ms.notes && ms.status === 'rejected' && (
-                      <span className="ml-1 text-red-500">· {ms.notes}</span>
-                    )}
-                  </p>
-                </div>
-                <span className={`text-xs rounded-full px-2 py-0.5 shrink-0 ${STATUS_COLOURS[ms.status] ?? ''}`}>
-                  {l(`meter.status.${ms.status}`, ms.status)}
-                </span>
-              </li>
-            ))}
+            {submissions.map((ms) => {
+              const src = submissionPhotoSrcs.get(ms.id)
+              return (
+                <li key={ms.id} className="py-2 flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className="w-10 h-10 rounded shrink-0 overflow-hidden bg-slate-100 dark:bg-slate-800">
+                      {src ? (
+                        <img
+                          src={src}
+                          alt={ms.originalFilename}
+                          className="w-full h-full object-cover cursor-pointer"
+                          onClick={() => setExpandedPhoto({ src, alt: ms.originalFilename })}
+                          title={l('meter.viewFull', 'Click to view full size')}
+                        />
+                      ) : null}
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium">{PHOTO_TYPE_LABELS[ms.photoType] ?? ms.photoType}</p>
+                      <p className="text-xs text-slate-500">
+                        {new Date(ms.submittedAt).toLocaleDateString('en-IN', {
+                          day: '2-digit', month: 'short', year: 'numeric',
+                        })}
+                        {ms.notes && ms.status === 'rejected' && (
+                          <span className="ml-1 text-red-500">· {ms.notes}</span>
+                        )}
+                      </p>
+                    </div>
+                  </div>
+                  <span className={`text-xs rounded-full px-2 py-0.5 shrink-0 ${STATUS_COLOURS[ms.status] ?? ''}`}>
+                    {l(`meter.status.${ms.status}`, ms.status)}
+                  </span>
+                </li>
+              )
+            })}
           </ul>
         )}
       </div>
+
+      {expandedPhoto && (
+        <PhotoLightbox
+          src={expandedPhoto.src}
+          alt={expandedPhoto.alt}
+          onClose={() => setExpandedPhoto(null)}
+        />
+      )}
 
       {/* Documents */}
       <div className="card p-4 sm:p-6 space-y-2">

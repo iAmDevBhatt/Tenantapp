@@ -100,6 +100,7 @@ Legend: **A** = admin JWT required, **T** = tenant JWT required, **P** = public.
 | GET | `/api/portal/invoices/{invoice_id}/payments/{payment_id}/receipt.pdf` | T | read-only; own invoice's own payment only, scoped via `_owned_invoice_or_404` |
 | POST | `/api/portal/meter-submissions` | T | multipart: `file` + `photo_type` (Form); validates type in `{flat_meter,water_meter,property}`; image-only MIME; 20 MB cap; rate-limited 20/min; returns `MeterSubmissionOut` |
 | GET | `/api/portal/meter-submissions` | T | list tenant's own submissions, newest first; returns `list[MeterSubmissionOut]` |
+| GET | `/api/portal/meter-submissions/{ms_id}/photo` | T | stream the raw uploaded file for one of the tenant's own submissions (any status); `FileResponse` |
 | GET | `/api/portal/invoices/{invoice_id}/meter-photos/{photo_id}` | T | streams one meter photo attached to an owned invoice; `FileResponse` |
 | GET | `/api/tenants/{tenant_id}/meter-submissions?status=` | A | list submissions for a tenant; optional `status` filter; returns `list[MeterSubmissionOut]` |
 | GET | `/api/tenants/{tenant_id}/meter-submissions/{ms_id}/photo` | A | stream the raw uploaded file; `FileResponse` |
