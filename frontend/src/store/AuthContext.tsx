@@ -12,7 +12,7 @@ interface AuthContextValue {
 
   tenantAuthed: boolean
   tenantLogin: (username: string, password: string) => Promise<void>
-  tenantRegister: (code: string, username: string, password: string) => Promise<void>
+  tenantRegister: (code: string, username: string, password: string, fullName: string) => Promise<void>
   tenantLogout: () => void
 }
 
@@ -39,8 +39,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setTenantAuthed(true)
   }, [])
 
-  const tenantRegister = useCallback(async (code: string, username: string, password: string) => {
-    const { accessToken } = await portalAuthApi.register(code, username, password)
+  const tenantRegister = useCallback(async (code: string, username: string, password: string, fullName: string) => {
+    const { accessToken } = await portalAuthApi.register(code, username, password, fullName)
     safeStorage.setItem(TENANT_TOKEN_KEY, accessToken)
     setTenantAuthed(true)
   }, [])

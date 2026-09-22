@@ -134,6 +134,9 @@
       <div class="tenant-info">
         <p class="name">{{ tenant.name }}</p>
         <p class="address">{{ tenant.property_address }}</p>
+        {% if additional_occupants %}
+        <p class="address">Also: {{ additional_occupants | join(', ') }}</p>
+        {% endif %}
       </div>
 
       <div class="section-title">Utility Charges</div>

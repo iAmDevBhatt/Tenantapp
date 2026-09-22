@@ -20,14 +20,15 @@ def validate_code(code: str, db: Session = Depends(get_db)):
     return ValidateCodeResponse(
         valid=True,
         tenantName=tenant.name,
-        alreadyRegistered=bool(tenant.tenant_user),
+        alreadyRegistered=bool(tenant.tenant_users),
+        existingLoginCount=len(tenant.tenant_users),
     )
 
 
 @router.post("/register", response_model=TokenResponse)
 @limiter.limit("10/minute")
 def register(request: Request, body: RegisterRequest, db: Session = Depends(get_db)):
-    tenant_user = invite_service.register_tenant_user(db, body.code, body.username, body.password)
+    tenant_user = invite_service.register_tenant_user(db, body.code, body.username, body.password, body.fullName)
     token = create_access_token(
         subject=tenant_user.id, role="tenant", extra_claims={"tenantId": tenant_user.tenant_id}
     )

@@ -69,6 +69,7 @@ class InvoiceOut(BaseModel):
     createdAt: datetime
     writeOffs: list[WriteOffOut] = []
     payments: list[PaymentOut] = []
+    additionalOccupants: list[str] = []
     netPayable: Decimal = Decimal("0")
     totalPaid: Decimal = Decimal("0")
     outstanding: Decimal = Decimal("0")

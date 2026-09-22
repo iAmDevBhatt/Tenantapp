@@ -45,7 +45,7 @@ Legend: **A** = admin JWT required, **T** = tenant JWT required, **P** = public.
 | GET | `/api/auth/me` | A | current admin identity |
 | POST | `/api/auth/change-password` | A | `{currentPassword,newPassword}` |
 | GET | `/api/portal/auth/validate-code?code=` | P | `{valid, tenantName?, alreadyRegistered}` |
-| POST | `/api/portal/auth/register` | P | `{code,username,password}` → tenant JWT |
+| POST | `/api/portal/auth/register` | P | `{code,username,password,fullName}` → tenant JWT; a tenant can have multiple logins (co-tenants) — not blocked once one exists, just needs a fresh invite code each time |
 | POST | `/api/portal/auth/login` | P | `{username,password}` → tenant JWT |
 | GET/PUT | `/api/settings` | A | owner name, default UPI, due days |
 | POST/DELETE | `/api/settings/property-photo` | A | multipart upload / remove |
@@ -67,9 +67,10 @@ Legend: **A** = admin JWT required, **T** = tenant JWT required, **P** = public.
 | POST | `/api/tenants/{id}/profile-photo` | A | multipart upload; replaces existing |
 | GET | `/api/tenants/{id}/profile-photo` | A | streams the profile photo |
 | DELETE | `/api/tenants/{id}/profile-photo` | A | removes file + clears column |
-| PATCH | `/api/tenants/{id}/portal-block` | A | toggle `portal_access_blocked` on `TenantUser`; 400 if no portal account |
-| DELETE | `/api/tenants/{id}/portal-account` | A | delete the `TenantUser` row; 400 if none; frees the tenant to register again via a new invite |
-| POST | `/api/tenants/{id}/portal-account/reset-password` | A | generates a random password, saves it, returns `{password}` once; 400 if no portal account |
+| PATCH | `/api/tenants/{id}/portal-users/{tenant_user_id}` | A | `{fullName?, showOnInvoice?}` — edit one login's display name / invoice visibility |
+| PATCH | `/api/tenants/{id}/portal-users/{tenant_user_id}/block` | A | toggle `portal_access_blocked` on one specific login |
+| DELETE | `/api/tenants/{id}/portal-users/{tenant_user_id}` | A | delete one login; a tenant can have several (co-tenants), deleting one doesn't touch the others |
+| POST | `/api/tenants/{id}/portal-users/{tenant_user_id}/reset-password` | A | generates a random password for that login, saves it, returns `{password}` once |
 | GET/POST/DELETE | `/api/tenants/{id}/invite` | A | get / generate (regenerate replaces) / revoke |
 | GET | `/api/properties` | A | list all properties with their flats |
 | POST | `/api/properties` | A | create property |

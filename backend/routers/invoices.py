@@ -70,6 +70,7 @@ def _out(inv, db=None) -> InvoiceOut:
         paid=inv.paid, paidDate=inv.paid_date, createdAt=inv.created_at,
         writeOffs=write_offs,
         payments=payments,
+        additionalOccupants=[tu.full_name for tu in inv.tenant.tenant_users if tu.show_on_invoice and tu.full_name],
         netPayable=invoice_service.net_payable(inv),
         totalPaid=invoice_service.total_paid(inv),
         outstanding=invoice_service.outstanding(inv),

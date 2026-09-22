@@ -41,6 +41,11 @@ export default function InvoiceDocument({ invoice, tenantName, tenantAddress, qr
         <div className="inv-section-title">{l('invoice.section.tenantInfo', 'Tenant Information')}</div>
         <p className="inv-tenant-name">{tenantName}</p>
         <p className="inv-tenant-address">{tenantAddress}</p>
+        {invoice.additionalOccupants.length > 0 && (
+          <p className="inv-tenant-address">
+            {l('invoice.also', 'Also: {names}').replace('{names}', invoice.additionalOccupants.join(', '))}
+          </p>
+        )}
 
         <div className="inv-section-title">{l('invoice.section.utilityCharges', 'Utility Charges')}</div>
         <table className="inv-table">

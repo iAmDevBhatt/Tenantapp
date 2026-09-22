@@ -1,3 +1,11 @@
+export interface PortalUser {
+  id: string
+  username: string
+  fullName: string
+  showOnInvoice: boolean
+  portalAccessBlocked: boolean
+}
+
 export interface Tenant {
   id: string
   name: string
@@ -12,9 +20,8 @@ export interface Tenant {
   moveInDate: string
   moveOutDate: string | null
   hasPortalAccount: boolean
-  portalUsername: string | null
+  portalUsers: PortalUser[]
   hasProfilePhoto: boolean
-  portalAccessBlocked: boolean
   flatId: string | null
   permanentAddress: string | null
   emergencyContactName: string | null

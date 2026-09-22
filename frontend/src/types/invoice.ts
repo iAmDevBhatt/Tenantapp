@@ -72,6 +72,7 @@ export interface Invoice {
   createdAt: string
   writeOffs: WriteOff[]
   payments: Payment[]
+  additionalOccupants: string[]
   netPayable: string
   totalPaid: string
   outstanding: string

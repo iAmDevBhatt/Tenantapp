@@ -43,6 +43,21 @@ class DeactivateRequest(BaseModel):
     moveOutDate: date | None = None
 
 
+class PortalUserOut(BaseModel):
+    id: str
+    username: str
+    fullName: str
+    showOnInvoice: bool
+    portalAccessBlocked: bool
+
+    model_config = {"from_attributes": True}
+
+
+class PortalUserUpdate(BaseModel):
+    fullName: str | None = None
+    showOnInvoice: bool | None = None
+
+
 class TenantOut(BaseModel):
     id: str
     name: str
@@ -57,9 +72,8 @@ class TenantOut(BaseModel):
     moveInDate: date
     moveOutDate: date | None
     hasPortalAccount: bool = False
-    portalUsername: str | None = None
+    portalUsers: list[PortalUserOut] = []
     hasProfilePhoto: bool = False
-    portalAccessBlocked: bool = False
     flatId: str | None = None
     permanentAddress: str | None = None
     emergencyContactName: str | None = None

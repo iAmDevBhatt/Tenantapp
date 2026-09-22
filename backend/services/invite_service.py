@@ -54,19 +54,22 @@ def validate_code(db: Session, code: str) -> tuple[TenantInvite, Tenant]:
     return invite, tenant
 
 
-def register_tenant_user(db: Session, code: str, username: str, password: str) -> TenantUser:
+def register_tenant_user(db: Session, code: str, username: str, password: str, full_name: str) -> TenantUser:
+    """Multiple co-tenants can register against the same tenant -- each
+    invite code is still single-use, so adding a co-tenant is just
+    generating a fresh invite (POST /{tenant_id}/invite) and having them
+    register through it. Username stays globally unique across all tenants."""
     invite, tenant = validate_code(db, code)
 
     existing = db.query(TenantUser).filter(TenantUser.username == username).first()
     if existing:
         raise HTTPException(status_code=400, detail="Username already taken")
-    if tenant.tenant_user:
-        raise HTTPException(status_code=400, detail="This tenant already has a portal account")
 
     tenant_user = TenantUser(
         tenant_id=tenant.id,
         username=username,
         password_hash=hash_password(password),
+        full_name=full_name,
     )
     invite.used_at = datetime.utcnow()
     db.add(tenant_user)

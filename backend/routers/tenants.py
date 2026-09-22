@@ -10,7 +10,7 @@ from backend.models.meter_submission import MeterSubmission
 from backend.schemas.meter_submission import MeterSubmissionOut, ReviewRequest
 from backend.schemas.tenant import (
     TenantCreate, TenantUpdate, TenantOut, DeactivateRequest, NextInvoiceDefaults,
-    PortalPasswordResetOut,
+    PortalPasswordResetOut, PortalUserOut, PortalUserUpdate,
 )
 from backend.schemas.tenant_document import DocumentOut
 from backend.schemas.invite import InviteOut, InviteStatus
@@ -25,10 +25,15 @@ def _tenant_out(t) -> TenantOut:
         monthlyRent=t.monthly_rent, roomRate=t.room_rate, waterRate=t.water_rate,
         waterDivisor=t.water_divisor, upiId=t.upi_id, active=t.active,
         moveInDate=t.move_in_date, moveOutDate=t.move_out_date,
-        hasPortalAccount=t.tenant_user is not None,
-        portalUsername=t.tenant_user.username if t.tenant_user else None,
+        hasPortalAccount=bool(t.tenant_users),
+        portalUsers=[
+            PortalUserOut(
+                id=tu.id, username=tu.username, fullName=tu.full_name,
+                showOnInvoice=tu.show_on_invoice, portalAccessBlocked=tu.portal_access_blocked,
+            )
+            for tu in t.tenant_users
+        ],
         hasProfilePhoto=bool(t.profile_photo_path),
-        portalAccessBlocked=bool(t.tenant_user and t.tenant_user.portal_access_blocked),
         flatId=t.flat_id,
         permanentAddress=t.permanent_address,
         emergencyContactName=t.emergency_contact_name,
@@ -200,31 +205,33 @@ def delete_profile_photo(tenant_id: str, db: Session = Depends(get_db)):
     return _tenant_out(tenant)
 
 
-# --- Portal access block ---
+# --- Portal logins (a tenant may have several -- co-tenants sharing a flat) ---
 
-@router.patch("/{tenant_id}/portal-block", response_model=TenantOut)
-def toggle_portal_block(tenant_id: str, db: Session = Depends(get_db)):
+@router.patch("/{tenant_id}/portal-users/{tenant_user_id}", response_model=TenantOut)
+def update_portal_user(tenant_id: str, tenant_user_id: str, body: PortalUserUpdate, db: Session = Depends(get_db)):
     tenant = tenant_service.get_or_404(db, tenant_id)
-    if not tenant.tenant_user:
-        from fastapi import HTTPException
-        raise HTTPException(status_code=400, detail="This tenant has no portal account.")
-    tenant.tenant_user.portal_access_blocked = not tenant.tenant_user.portal_access_blocked
-    db.commit()
-    db.refresh(tenant)
+    tenant = tenant_service.update_portal_user(db, tenant, tenant_user_id, body.fullName, body.showOnInvoice)
     return _tenant_out(tenant)
 
 
-@router.delete("/{tenant_id}/portal-account", response_model=TenantOut)
-def delete_portal_account(tenant_id: str, db: Session = Depends(get_db)):
+@router.patch("/{tenant_id}/portal-users/{tenant_user_id}/block", response_model=TenantOut)
+def toggle_portal_block(tenant_id: str, tenant_user_id: str, db: Session = Depends(get_db)):
     tenant = tenant_service.get_or_404(db, tenant_id)
-    tenant = tenant_service.delete_portal_account(db, tenant)
+    tenant = tenant_service.toggle_portal_block(db, tenant, tenant_user_id)
     return _tenant_out(tenant)
 
 
-@router.post("/{tenant_id}/portal-account/reset-password", response_model=PortalPasswordResetOut)
-def reset_portal_password(tenant_id: str, db: Session = Depends(get_db)):
+@router.delete("/{tenant_id}/portal-users/{tenant_user_id}", response_model=TenantOut)
+def delete_portal_account(tenant_id: str, tenant_user_id: str, db: Session = Depends(get_db)):
     tenant = tenant_service.get_or_404(db, tenant_id)
-    password = tenant_service.reset_portal_password(db, tenant)
+    tenant = tenant_service.delete_portal_account(db, tenant, tenant_user_id)
+    return _tenant_out(tenant)
+
+
+@router.post("/{tenant_id}/portal-users/{tenant_user_id}/reset-password", response_model=PortalPasswordResetOut)
+def reset_portal_password(tenant_id: str, tenant_user_id: str, db: Session = Depends(get_db)):
+    tenant = tenant_service.get_or_404(db, tenant_id)
+    password = tenant_service.reset_portal_password(db, tenant, tenant_user_id)
     return PortalPasswordResetOut(password=password)
 
 
@@ -240,7 +247,7 @@ def get_invite(tenant_id: str, db: Session = Depends(get_db)):
     inv = invite_service.current_invite(db, tenant_id)
     return InviteStatus(
         invite=_invite_out(inv) if inv else None,
-        hasRegistered=tenant.tenant_user is not None,
+        hasRegistered=bool(tenant.tenant_users),
     )
 
 

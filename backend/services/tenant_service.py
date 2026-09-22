@@ -12,6 +12,7 @@ from backend.models.invoice import Invoice
 from backend.models.meter_submission import MeterSubmission
 from backend.models.tenant import Tenant
 from backend.models.tenant_document import TenantDocument
+from backend.models.tenant_user import TenantUser
 
 
 def get_or_404(db: Session, tenant_id: str) -> Tenant:
@@ -50,8 +51,8 @@ def update_tenant(db: Session, tenant: Tenant, data: dict) -> Tenant:
 def deactivate(db: Session, tenant: Tenant, move_out_date: date | None) -> Tenant:
     tenant.active = False
     tenant.move_out_date = move_out_date or date.today()
-    if tenant.tenant_user:
-        tenant.tenant_user.portal_access_blocked = True
+    for tu in tenant.tenant_users:
+        tu.portal_access_blocked = True
     db.commit()
     db.refresh(tenant)
     return tenant
@@ -86,19 +87,43 @@ def delete_tenant(db: Session, tenant: Tenant) -> None:
     shutil.rmtree(os.path.join(settings.UPLOADS_DIR, "tenants", tenant_id), ignore_errors=True)
 
 
-def delete_portal_account(db: Session, tenant: Tenant) -> Tenant:
-    if not tenant.tenant_user:
-        raise HTTPException(status_code=400, detail="This tenant has no portal account.")
-    db.delete(tenant.tenant_user)
+def _get_portal_user_or_404(tenant: Tenant, tenant_user_id: str) -> TenantUser:
+    tu = next((u for u in tenant.tenant_users if u.id == tenant_user_id), None)
+    if not tu:
+        raise HTTPException(status_code=404, detail="Portal login not found")
+    return tu
+
+
+def delete_portal_account(db: Session, tenant: Tenant, tenant_user_id: str) -> Tenant:
+    tu = _get_portal_user_or_404(tenant, tenant_user_id)
+    db.delete(tu)
     db.commit()
     db.refresh(tenant)
     return tenant
 
 
-def reset_portal_password(db: Session, tenant: Tenant) -> str:
-    if not tenant.tenant_user:
-        raise HTTPException(status_code=400, detail="This tenant has no portal account.")
+def reset_portal_password(db: Session, tenant: Tenant, tenant_user_id: str) -> str:
+    tu = _get_portal_user_or_404(tenant, tenant_user_id)
     new_password = secrets.token_urlsafe(9)  # same pattern as invite_service.generate_invite
-    tenant.tenant_user.password_hash = hash_password(new_password)
+    tu.password_hash = hash_password(new_password)
     db.commit()
     return new_password
+
+
+def toggle_portal_block(db: Session, tenant: Tenant, tenant_user_id: str) -> Tenant:
+    tu = _get_portal_user_or_404(tenant, tenant_user_id)
+    tu.portal_access_blocked = not tu.portal_access_blocked
+    db.commit()
+    db.refresh(tenant)
+    return tenant
+
+
+def update_portal_user(db: Session, tenant: Tenant, tenant_user_id: str, full_name: str | None, show_on_invoice: bool | None) -> Tenant:
+    tu = _get_portal_user_or_404(tenant, tenant_user_id)
+    if full_name is not None:
+        tu.full_name = full_name
+    if show_on_invoice is not None:
+        tu.show_on_invoice = show_on_invoice
+    db.commit()
+    db.refresh(tenant)
+    return tenant

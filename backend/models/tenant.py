@@ -37,7 +37,7 @@ class Tenant(Base):
     invites = relationship(
         "TenantInvite", cascade="all, delete-orphan", back_populates="tenant"
     )
-    tenant_user = relationship(
-        "TenantUser", uselist=False, cascade="all, delete-orphan", back_populates="tenant"
+    tenant_users = relationship(
+        "TenantUser", cascade="all, delete-orphan", back_populates="tenant"
     )
     flat = relationship("PropertyFlat", back_populates="tenants")

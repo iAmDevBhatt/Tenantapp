@@ -100,6 +100,10 @@ def run_migrations() -> None:
         _add_column_if_missing(conn, "tenant_documents", "tenant_visible", "INTEGER NOT NULL DEFAULT 0")
         # R8: landlord can block portal access temporarily (or on move-out)
         _add_column_if_missing(conn, "tenant_users", "portal_access_blocked", "INTEGER NOT NULL DEFAULT 0")
+        # R12: multiple co-tenant logins per tenant (default show_on_invoice=False
+        # so existing tenants' invoices look exactly as they did before this)
+        _add_column_if_missing(conn, "tenant_users", "full_name", "TEXT NOT NULL DEFAULT ''")
+        _add_column_if_missing(conn, "tenant_users", "show_on_invoice", "INTEGER NOT NULL DEFAULT 0")
         # R9: meter submission metadata (photo type, filename, MIME, size)
         _add_column_if_missing(conn, "meter_submissions", "photo_type", "TEXT NOT NULL DEFAULT 'other'")
         _add_column_if_missing(conn, "meter_submissions", "original_filename", "TEXT NOT NULL DEFAULT ''")

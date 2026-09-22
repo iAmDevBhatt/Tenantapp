@@ -16,7 +16,9 @@ export default function PortalRegisterPage() {
   const [valid, setValid] = useState(false)
   const [tenantName, setTenantName] = useState('')
   const [alreadyRegistered, setAlreadyRegistered] = useState(false)
+  const [existingLoginCount, setExistingLoginCount] = useState(0)
 
+  const [fullName, setFullName] = useState('')
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
@@ -33,6 +35,7 @@ export default function PortalRegisterPage() {
         setValid(r.valid)
         setTenantName(r.tenantName ?? '')
         setAlreadyRegistered(r.alreadyRegistered)
+        setExistingLoginCount(r.existingLoginCount)
       })
       .finally(() => setChecking(false))
   }, [code])
@@ -44,7 +47,7 @@ export default function PortalRegisterPage() {
     setLoading(true)
     setError(null)
     try {
-      await register(code, username, password)
+      await register(code, username, password, fullName)
       navigate('/portal')
     } catch (err: any) {
       setError(errorMessage(err, l('error.createAccount', 'Could not create your account')))
@@ -68,11 +71,6 @@ export default function PortalRegisterPage() {
           <div className="rounded-lg bg-red-50 text-red-700 px-3 py-2 text-sm">
             {l('error.invalidInvite', 'This invite link is invalid or has expired. Ask your landlord to send you a new one.')}
           </div>
-        ) : alreadyRegistered ? (
-          <div className="rounded-lg bg-amber-50 text-amber-700 px-3 py-2 text-sm">
-            {l('register.alreadyRegistered', 'This tenant already has a portal login.')}{' '}
-            <a className="underline" href="/portal/login">{l('register.signInInstead', 'Sign in instead')}</a>.
-          </div>
         ) : (
           <form onSubmit={handleSubmit} className="space-y-4">
             {tenantName && (
@@ -80,13 +78,30 @@ export default function PortalRegisterPage() {
                 {l('register.welcome', 'Welcome, {tenantName}!').replace('{tenantName}', tenantName)}
               </p>
             )}
+            {alreadyRegistered && (
+              <div className="rounded-lg bg-amber-50 text-amber-700 px-3 py-2 text-sm">
+                {l('register.alreadyRegisteredInfo', 'This flat already has {count} portal login(s). Registering below adds another, separate login sharing the same invoices.').replace('{count}', String(existingLoginCount))}{' '}
+                <a className="underline" href="/portal/login">{l('register.signInInstead', 'Sign in instead')}</a>.
+              </div>
+            )}
             {error && <div className="rounded-lg bg-red-50 text-red-700 px-3 py-2 text-sm">{error}</div>}
+            <div>
+              <label className="field-label">{l('form.label.yourName', 'Your name')}</label>
+              <input
+                className="field-input"
+                required
+                autoFocus
+                minLength={2}
+                value={fullName}
+                onChange={(e) => setFullName(e.target.value)}
+              />
+              <p className="text-xs text-slate-500 mt-1">{l('form.hint.yourName', 'Shown to your landlord; only printed on the invoice if they choose to.')}</p>
+            </div>
             <div>
               <label className="field-label">{l('form.label.chooseUsername', 'Choose a username')}</label>
               <input
                 className="field-input"
                 required
-                autoFocus
                 minLength={3}
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}

@@ -61,6 +61,10 @@ def build_invoice_view(invoice: Invoice, tenant: Tenant, app_settings: AppSettin
     }
 
 
+def _additional_occupants(tenant: Tenant) -> list[str]:
+    return [tu.full_name for tu in tenant.tenant_users if tu.show_on_invoice and tu.full_name]
+
+
 def render_invoice_pdf(invoice: Invoice, tenant: Tenant, app_settings: AppSettings) -> bytes:
     if HTML is None:
         raise PdfUnavailableError(
@@ -89,6 +93,7 @@ def render_invoice_pdf(invoice: Invoice, tenant: Tenant, app_settings: AppSettin
         tenant=tenant,
         settings=app_settings,
         owner_name=app_settings.owner_name,
+        additional_occupants=_additional_occupants(tenant),
         qr_data_uri=qr_data_uri,
         property_photo_data_uri=property_photo_data_uri,
         meter_photo_data_uris=meter_photo_data_uris,
@@ -118,6 +123,7 @@ def render_payment_receipt_pdf(payment: InvoicePayment, invoice: Invoice, tenant
         tenant=tenant,
         settings=app_settings,
         payee_name=app_settings.owner_name,
+        additional_occupants=_additional_occupants(tenant),
         proof_photo_data_uri=proof_photo_data_uri,
         net_payable=invoice_service.net_payable(invoice),
         total_paid=invoice_service.total_paid(invoice),

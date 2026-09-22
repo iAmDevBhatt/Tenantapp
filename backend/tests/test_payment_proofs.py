@@ -11,7 +11,7 @@ def _register_portal_user(client, admin_headers, tenant_id, username, password):
     code = inv.json()["code"]
     resp = client.post(
         "/api/portal/auth/register",
-        json={"code": code, "username": username, "password": password},
+        json={"code": code, "username": username, "password": password, "fullName": username},
     )
     assert resp.status_code == 200, resp.text
     token = resp.json()["accessToken"]

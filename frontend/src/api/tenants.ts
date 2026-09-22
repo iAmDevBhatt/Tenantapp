@@ -35,14 +35,17 @@ export const tenantsApi = {
 
   downloadAllDocsUrl: (tenantId: string) => `/tenants/${tenantId}/documents/download-all`,
 
-  togglePortalBlock: (tenantId: string) =>
-    adminClient.patch<Tenant>(`/tenants/${tenantId}/portal-block`).then((r) => r.data),
+  updatePortalUser: (tenantId: string, tenantUserId: string, data: { fullName?: string; showOnInvoice?: boolean }) =>
+    adminClient.patch<Tenant>(`/tenants/${tenantId}/portal-users/${tenantUserId}`, data).then((r) => r.data),
 
-  deletePortalAccount: (tenantId: string) =>
-    adminClient.delete<Tenant>(`/tenants/${tenantId}/portal-account`).then((r) => r.data),
+  togglePortalBlock: (tenantId: string, tenantUserId: string) =>
+    adminClient.patch<Tenant>(`/tenants/${tenantId}/portal-users/${tenantUserId}/block`).then((r) => r.data),
 
-  resetPortalPassword: (tenantId: string) =>
-    adminClient.post<{ password: string }>(`/tenants/${tenantId}/portal-account/reset-password`).then((r) => r.data),
+  deletePortalAccount: (tenantId: string, tenantUserId: string) =>
+    adminClient.delete<Tenant>(`/tenants/${tenantId}/portal-users/${tenantUserId}`).then((r) => r.data),
+
+  resetPortalPassword: (tenantId: string, tenantUserId: string) =>
+    adminClient.post<{ password: string }>(`/tenants/${tenantId}/portal-users/${tenantUserId}/reset-password`).then((r) => r.data),
 
   delete: (id: string) => adminClient.delete(`/tenants/${id}`),
 }
