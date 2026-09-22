@@ -37,6 +37,49 @@ def _add_column_if_missing(conn: Connection, table: str, column: str, ddl_type: 
         conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {column} {ddl_type}"))
 
 
+def _drop_tenant_user_unique_constraint(conn: Connection) -> None:
+    """R12 continued: the original tenant_users table was created (long
+    before co-tenants existed) with UNIQUE(tenant_id) baked into the table
+    definition itself. Base.metadata.create_all() only creates missing
+    tables -- it never alters an existing one's schema -- so on any DB that
+    predates this feature, that UNIQUE constraint is still enforced at the
+    SQLite level even though the SQLAlchemy model no longer declares it,
+    and a second co-tenant registration would fail with a raw
+    IntegrityError. SQLite has no ALTER TABLE DROP CONSTRAINT, so rebuild
+    the table without it -- guarded by checking the live schema text, so
+    it's a no-op on any DB where this has already run or that was created
+    fresh from the current model (no baked-in UNIQUE to begin with)."""
+    row = conn.execute(text(
+        "SELECT sql FROM sqlite_master WHERE type='table' AND name='tenant_users'"
+    )).fetchone()
+    if not row or "UNIQUE (tenant_id)" not in row[0]:
+        return
+    print("migrate: rebuilding tenant_users to drop UNIQUE(tenant_id)")
+    conn.execute(text("""
+        CREATE TABLE tenant_users_new (
+            id VARCHAR(36) NOT NULL PRIMARY KEY,
+            tenant_id VARCHAR(36) NOT NULL,
+            username VARCHAR NOT NULL,
+            password_hash VARCHAR NOT NULL,
+            full_name VARCHAR NOT NULL DEFAULT '',
+            show_on_invoice INTEGER NOT NULL DEFAULT 0,
+            created_at DATETIME,
+            portal_access_blocked INTEGER NOT NULL DEFAULT 0,
+            FOREIGN KEY(tenant_id) REFERENCES tenants (id)
+        )
+    """))
+    conn.execute(text("""
+        INSERT INTO tenant_users_new
+            (id, tenant_id, username, password_hash, full_name, show_on_invoice, created_at, portal_access_blocked)
+        SELECT id, tenant_id, username, password_hash, full_name, show_on_invoice, created_at, portal_access_blocked
+        FROM tenant_users
+    """))
+    conn.execute(text("DROP TABLE tenant_users"))
+    conn.execute(text("ALTER TABLE tenant_users_new RENAME TO tenant_users"))
+    conn.execute(text("CREATE UNIQUE INDEX ix_tenant_users_username ON tenant_users (username)"))
+    conn.execute(text("CREATE INDEX ix_tenant_users_tenant_id ON tenant_users (tenant_id)"))
+
+
 def _backfill_legacy_payments(conn: Connection) -> None:
     """R10: the old single-payment flow wrote a running total straight into
     invoices.amount_paid. Now that payments are a proper additive ledger
@@ -104,6 +147,7 @@ def run_migrations() -> None:
         # so existing tenants' invoices look exactly as they did before this)
         _add_column_if_missing(conn, "tenant_users", "full_name", "TEXT NOT NULL DEFAULT ''")
         _add_column_if_missing(conn, "tenant_users", "show_on_invoice", "INTEGER NOT NULL DEFAULT 0")
+        _drop_tenant_user_unique_constraint(conn)
         # R9: meter submission metadata (photo type, filename, MIME, size)
         _add_column_if_missing(conn, "meter_submissions", "photo_type", "TEXT NOT NULL DEFAULT 'other'")
         _add_column_if_missing(conn, "meter_submissions", "original_filename", "TEXT NOT NULL DEFAULT ''")
