@@ -55,6 +55,34 @@ def test_add_and_delete_payments_are_additive(client, admin_headers):
     assert Decimal(data3["outstanding"]) == net - Decimal("60")
 
 
+def test_full_payment_auto_marks_invoice_paid(client, admin_headers):
+    tenant = make_tenant(client, admin_headers, name="Auto Paid Tenant")
+    invoice = make_invoice(client, admin_headers, tenant["id"])
+    net = invoice["netPayable"]
+
+    # partial payment: should NOT auto-mark paid
+    partial = client.post(
+        f"/api/invoices/{invoice['id']}/payments",
+        json={"amount": "10"},
+        headers=admin_headers,
+    )
+    assert partial.status_code == 200, partial.text
+    assert partial.json()["paid"] is False
+
+    # remaining payment: should auto-mark paid
+    remaining = str(Decimal(net) - Decimal("10"))
+    full = client.post(
+        f"/api/invoices/{invoice['id']}/payments",
+        json={"amount": remaining, "paidDate": "2024-03-01"},
+        headers=admin_headers,
+    )
+    assert full.status_code == 200, full.text
+    data = full.json()
+    assert data["paid"] is True
+    assert data["paidDate"] == "2024-03-01"
+    assert Decimal(data["outstanding"]) == Decimal("0")
+
+
 def test_payment_cannot_exceed_outstanding(client, admin_headers):
     tenant = make_tenant(client, admin_headers, name="Overpay Test Tenant")
     invoice = make_invoice(client, admin_headers, tenant["id"])

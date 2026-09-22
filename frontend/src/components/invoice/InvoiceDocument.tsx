@@ -90,7 +90,13 @@ export default function InvoiceDocument({ invoice, tenantName, tenantAddress, qr
 
         <div className="inv-payment-area">
           <div>
-            <div className="inv-upi-label">{l('invoice.label.payViaUpi', 'Pay via UPI')}</div>
+            {invoice.payeeName && (
+              <>
+                <div className="inv-upi-label">{l('invoice.label.payableTo', 'Payable to')}</div>
+                <div className="inv-upi-id">{invoice.payeeName}</div>
+              </>
+            )}
+            <div className="inv-upi-label" style={invoice.payeeName ? { marginTop: 8 } : undefined}>{l('invoice.label.payViaUpi', 'Pay via UPI')}</div>
             <div className="inv-upi-id">{invoice.upiId || l('invoice.label.contactLandlord', 'Contact landlord for UPI ID')}</div>
           </div>
           {qrSrc ? (

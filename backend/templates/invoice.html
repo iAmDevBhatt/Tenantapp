@@ -184,6 +184,10 @@
 
       <div class="payment-area">
         <div class="upi-block">
+          {% if invoice.payee_name %}
+          <div class="upi-label">Payable to</div>
+          <div class="upi-id" style="margin-bottom: 8px;">{{ invoice.payee_name }}</div>
+          {% endif %}
           <div class="upi-label">Pay via UPI</div>
           <div class="upi-id">{{ invoice.upi_id or 'Contact landlord for UPI ID' }}</div>
         </div>

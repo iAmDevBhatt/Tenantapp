@@ -253,15 +253,28 @@ def add_payment(
     owed = outstanding(invoice)
     if amount <= Decimal("0") or amount > owed:
         raise HTTPException(status_code=422, detail=f"Amount must be between 0.01 and {owed}")
+    effective_date = paid_date or date.today()
     payment = InvoicePayment(
         invoice_id=invoice.id,
         amount=_q(amount),
-        paid_date=paid_date or date.today(),
+        paid_date=effective_date,
         method=method,
         notes=notes,
         recorded_by=recorded_by,
     )
     db.add(payment)
+    # Auto-mark paid once this payment fully covers what was still owed --
+    # the admin no longer has to separately remember to also click "Mark
+    # paid". `owed` was computed above, before this payment existed, so
+    # `amount >= owed` here means the ledger is now fully satisfied (the
+    # 422 check above already forbids amount > owed, so this is really
+    # amount == owed, but >= is used defensively). Only marks forward
+    # (paid=True); deleting a payment never auto-reverses this, since an
+    # admin may have manually marked an invoice paid for reasons unrelated
+    # to the payment ledger (e.g. a verbal settlement).
+    if amount >= owed:
+        invoice.paid = True
+        invoice.paid_date = effective_date
     db.commit()
     db.refresh(invoice)
     return invoice

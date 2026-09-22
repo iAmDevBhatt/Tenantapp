@@ -95,6 +95,12 @@
       </div>
 
       <div class="section-title">Payment Details</div>
+      {% if payee_name %}
+      <div class="dues-row">
+        <span class="label">Received by</span>
+        <span class="value">{{ payee_name }}</span>
+      </div>
+      {% endif %}
       <div class="dues-row">
         <span class="label">For invoice dated</span>
         <span class="value">{{ invoice.invoice_date.strftime('%d %B %Y') }}</span>
@@ -131,7 +137,6 @@
       </div>
 
       <div class="notes">
-        {% if payee_name %}Received by {{ payee_name }}.{% endif %}
         This receipt confirms the payment above was received against the invoice dated {{ invoice.invoice_date.strftime('%d %B %Y') }}.
       </div>
     </div>
