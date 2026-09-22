@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from backend.models.invoice import Invoice
 from backend.models.tenant import Tenant
+from backend.services import invoice_service
 from datetime import date
 
 
@@ -14,7 +15,7 @@ def overview(db: Session) -> dict:
     active_tenant_count = db.query(Tenant).filter(Tenant.active.is_(True)).count()
 
     unpaid = db.query(Invoice).filter(Invoice.paid.is_(False)).all()
-    total_outstanding = sum((inv.total_payable for inv in unpaid), Decimal("0"))
+    total_outstanding = sum((invoice_service.outstanding(inv) for inv in unpaid), Decimal("0"))
 
     today = date.today()
     this_month_paid = (
